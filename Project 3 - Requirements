@@ -1,0 +1,32 @@
+IS 3816/6808 – Assignment 3 Rubric
+
+The problem we are trying to solve is we need a Password Vault with a Password generator to encrypt with AES-256.
+
+- Technology Stack Research, CRUD Application
+- Clear identification of chosen technology stack (language, framework, storage, tools) Technology Stack Selection & Justification: we are doing Java. Need Justification.
+- Explanation of why the stack was chosen: Why is JavaFX and Java a great pick for a Password Vault?
+- Advantages and tradeoffs of the stack discussed: of using Java - Speed, security, avaiablity of libraries and on hosted systems.
+- Stack is appropriate for the problem being solved: why is Java appropriate?
+- Business & Industry Relevance?
+
+
+Project Requirements:
+- Must work on Linux and Windows!
+- JavaFX GUI
+- Storage Password prompt at startup. Store in secure RAM.
+- Decrypt database then present websites/decribptions identifying the data stored per row is per key pair(username/password) 
+- Create button to create random passwword or prompt for the password/username.
+- Store usernames and passwords encrypted in a sqlite database
+
+Project Overview:
+A fully offline, desktop-based password manager built in Java, using SQLite as our local database via JDBC. All data remains on the user's device at all times — no network connectivity required.
+
+Proposed Feature Set:
+• Front-end GUI (Java Swing or JavaFX) — Login screen, vault dashboard, add/edit entry forms
+• Back-end encryption engine — AES-256-GCM for authenticated encryption of stored passwords
+• PBKDF2 with a high iteration count and random salt for master password key derivation
+• Post-quantum considerations — AES-256 is already considered quantum-resistant under NIST guidance (Grover's algorithm reduces it to ~128-bit security, which remains safe). We plan to document this and explore CRYSTALS-Kyber (NIST FIPS 203) for the key encapsulation layer, time permitting
+• Password Generator using Java's SecureRandom
+• Session auto-lock and clipboard auto-clear for runtime security
+• Database: SQLite (local .db file). No passwords or master key material are ever written to disk in plaintext.
+
