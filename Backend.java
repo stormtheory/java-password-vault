@@ -18,18 +18,18 @@ public class Backend {
     private SecretKey aesKey;
 
     // ===== DATA CLASS =====
-    // If you build itm they will come...
-    public static class Credential {
-        public int id;
-        public String tag;
-        public String username;
-        public byte[] encryptedPassword;
-        public byte[] iv;
+    // If you build it they will come...
+    protected static class Credential {
+        protected int id;
+        protected String tag;
+        protected String username;
+        protected byte[] encryptedPassword;
+        protected byte[] iv;
     }
 
     // ===== INIT (derive key once per session) ===== 
     // A salt is just random data added to a password before key derivation --- prevents Rainbow Table attacks
-    public void initialize(char[] masterPassword, byte[] salt) throws Exception {
+    protected void initialize(char[] masterPassword, byte[] salt) throws Exception {
         this.aesKey = deriveKey(masterPassword, salt);
         wipeCharArray(masterPassword);
     }
@@ -57,7 +57,7 @@ public class Backend {
     }
 
     // ===== DECRYPT (ON DEMAND ONLY) =====
-    public char[] decryptPassword(byte[] encrypted, byte[] iv) throws Exception {
+    protected char[] decryptPassword(byte[] encrypted, byte[] iv) throws Exception {
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
         cipher.init(Cipher.DECRYPT_MODE, aesKey, spec);
@@ -70,7 +70,7 @@ public class Backend {
     }
 
     // ===== DB LOAD (NO DECRYPTION HERE) ===== This just load the database to an Arraylist nothing is decrypted
-    public List<Credential> loadAll(Connection conn) throws Exception {
+    protected List<Credential> loadAll(Connection conn) throws Exception {
         List<Credential> list = new ArrayList<>();
 
         String sql = "SELECT id, tag, username, password, iv FROM vault";
@@ -92,7 +92,7 @@ public class Backend {
     }
 
     // ===== ADD ENTRY =====  ---- Has to happen at some point?
-    public void addEntry(Connection conn, String tag, String username, char[] password) throws Exception {
+    protected void addEntry(Connection conn, String tag, String username, char[] password) throws Exception {
         byte[] iv = generateIV();
         byte[] encrypted = encrypt(password, iv);
 
@@ -111,7 +111,7 @@ public class Backend {
     }
 
     // ===== DELETE ENTRY ===== ----- Yup
-    public void deleteEntry(Connection conn, int id) throws Exception {
+    protected void deleteEntry(Connection conn, int id) throws Exception {
         String sql = "DELETE FROM vault WHERE id = ?";
         PreparedStatement stmt = conn.prepareStatement(sql);
         stmt.setInt(1, id);
@@ -119,7 +119,7 @@ public class Backend {
     }
 
     // ===== UPDATE PASSWORD ===== --- I think this is obvious....
-    public void updatePassword(Connection conn, int id, char[] newPassword) throws Exception {
+    protected void updatePassword(Connection conn, int id, char[] newPassword) throws Exception {
         byte[] iv = generateIV();
         byte[] encrypted = encrypt(newPassword, iv);
 
@@ -146,13 +146,13 @@ public class Backend {
 
     // ===== MEMORY CLEANUP FUNCTIONS (METHODS) =====
     // destroy the keys or plaintext passowrds and data
-    public static void wipeCharArray(char[] data) {
+    protected static void wipeCharArray(char[] data) {
         if (data != null) {
             Arrays.fill(data, '\0');
         }
     }
 
-    public static void wipeByteArray(byte[] data) {
+    protected static void wipeByteArray(byte[] data) {
         if (data != null) {
             Arrays.fill(data, (byte) 0);
         }
