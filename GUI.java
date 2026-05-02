@@ -6,6 +6,7 @@ import java.sql.*;
 import java.util.List;
 
 public class GUI {
+    //public boolean DEBUG = true; //true or false set to false before production
 
     private Backend backend = new Backend();
     private Connection conn;
@@ -50,8 +51,9 @@ public class GUI {
             initializeDatabase(conn);
         }
 
-        // ===== GET SALT =====
+        // ===== GET SALT ===== #### Pulled from vault.db radom to each vault
         byte[] salt = getOrCreateSalt(conn);
+        if (DEBUG) {System.out.println("[GUI] get Salt: " + salt);}
 
         // ===== MASTER PASSWORD PROMPT =====
         char[] masterPassword;
@@ -91,7 +93,7 @@ public class GUI {
             Backend.wipeCharArray(p2);
 
         } else {
-            // ===== ENTER PASSWORD =====
+            // ===== AT STARTUP - ENTER PASSWORD =====
             JPasswordField pf = new JPasswordField();
 
             int ok = JOptionPane.showConfirmDialog(
@@ -112,7 +114,7 @@ public class GUI {
         backend.initialize(masterPassword, salt);
 
         // ===== LOAD DATA =====
-        // Loads all data into an ArraryList
+        // Loads all data into an ArraryList (not decrypted)
         credentials = backend.loadAll(conn);
 
         // ===== BUILD UI =====

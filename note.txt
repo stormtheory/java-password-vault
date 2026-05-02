@@ -1,0 +1,17 @@
+.headers on
+.tables
+select * from meta;
+select * from vault;
+
+
+
+
+id|tag      |username|password          |iv
+1 |Bitward  |tom   |���J��Db��{�%.2V�   |�
+                                   _H�M)R�&
+2 |test     |tester|� �qX�@V���6������  |/�biBBv�}R�
+
+
+
+key |value
+salt|�~�O�?T�2p���
