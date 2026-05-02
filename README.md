@@ -132,23 +132,33 @@ No external database or installer required.
 
 # Using Netbeans:
 ### What a NetBeans user needs to do
+        0. Create New Java Project
+            Java with ANT
+            Name it Vault
+            Drag and drop the files below into your Source Packages under <default package>:
+                Backend.java
+                GUI.java
+
         1. Add the SQLite driver
             In NetBeans:
-
-            Right-click project
-            Properties
-            Go to Libraries
-            Click Add JAR/Folder
+            -Right-click Libraries
+            -Click Add JAR/Folder
             Select:
                 sqlite-jdbc-3.53.0.0.jar
+
         2. May need to add:
             Add JVM option in NetBeans
-                Right-click project
+                Right-click project (Vault)
                 Properties
                 Go to:
                 Run
-                In VM Options, add:
+                In [VM Options], copy and paste in:
                     --enable-native-access=ALL-UNNAMED
+                If you have a locked down (noexec) /tmp directory you will also need to add:
+                    -Djava.io.tmpdir=.
+
+        3. Click the green Play Button (Run Project)
+        4. Select GUI as your main class
 
 ## Clean and Build:
 ### one JAR contains everything - run anywhere
