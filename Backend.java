@@ -24,6 +24,7 @@ public class Backend {
         protected int id;
         protected String tag;
         protected String username;
+        protected byte[] encryptedUsername;
         protected byte[] encryptedPassword;
         protected byte[] iv;
     }
@@ -51,20 +52,23 @@ public class Backend {
     }
 
     // ===== ENCRYPT ===== using AES256-GCM which AES is like a lock 🔒 and GCM is the tamper seal 🧾
+    // 🔒 will encrypt whatever data you feed into it, then return the ecypted value
+    // IV is a random value used during encryption so that the same input doesn’t produce the same hash output
+    // Generated for us whenever new data cycle/set is saved
     private byte[] encrypt(char[] password, byte[] iv) throws Exception {
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
         cipher.init(Cipher.ENCRYPT_MODE, aesKey, spec);
 
         byte[] data = new String(password).getBytes(StandardCharsets.UTF_8);
-        byte[] encrypted = cipher.doFinal(data);
+        byte[] encrypted_data = cipher.doFinal(data);
 
         wipeByteArray(data);
-        return encrypted;
+        return encrypted_data;
     }
 
     // ===== DECRYPT (ON DEMAND ONLY) =====
-    protected char[] decryptPassword(byte[] encrypted, byte[] iv) throws Exception {
+    protected char[] decryptData(byte[] encrypted, byte[] iv) throws Exception {
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
         cipher.init(Cipher.DECRYPT_MODE, aesKey, spec);
@@ -88,7 +92,9 @@ public class Backend {
             Credential c = new Credential();
             c.id = rs.getInt("id");
             c.tag = rs.getString("tag");
-            c.username = rs.getString("username");
+            //c.username = rs.getString("username");
+            c.iv = rs.getBytes("iv");
+            c.username = new String(decryptData(rs.getBytes("username"), c.iv));
             c.encryptedPassword = rs.getBytes("password");
             c.iv = rs.getBytes("iv");
 
@@ -99,22 +105,25 @@ public class Backend {
     }
 
     // ===== ADD ENTRY =====  ---- Has to happen at some point?
-    protected void addEntry(Connection conn, String tag, String username, char[] password) throws Exception {
+    protected void addEntry(Connection conn, String tag, char[] username, char[] password) throws Exception {
         byte[] iv = generateIV();
-        byte[] encrypted = encrypt(password, iv);
-
+        byte[] encrypted_username = encrypt(username, iv);
+        byte[] encrypted_pass = encrypt(password, iv);
+        
         String sql = "INSERT INTO vault(tag, username, password, iv) VALUES (?, ?, ?, ?)";
         PreparedStatement stmt = conn.prepareStatement(sql);
 
         stmt.setString(1, tag);
-        stmt.setString(2, username);
-        stmt.setBytes(3, encrypted);
+        stmt.setBytes(2, encrypted_username);
+        stmt.setBytes(3, encrypted_pass);
         stmt.setBytes(4, iv);
 
         stmt.executeUpdate();
 
+        wipeByteArray(encrypted_username);
+
         wipeCharArray(password);
-        wipeByteArray(encrypted);
+        wipeByteArray(encrypted_pass);
     }
 
     // ===== DELETE ENTRY ===== ----- Yup
@@ -126,25 +135,46 @@ public class Backend {
     }
 
     // ===== UPDATE PASSWORD ===== --- I think this is obvious....
+    // per item password update
     protected void updatePassword(Connection conn, int id, char[] newPassword) throws Exception {
         byte[] iv = generateIV();
-        byte[] encrypted = encrypt(newPassword, iv);
+        byte[] encrypted_pass = encrypt(newPassword, iv);
 
         String sql = "UPDATE vault SET password = ?, iv = ? WHERE id = ?";
         PreparedStatement stmt = conn.prepareStatement(sql);
 
-        stmt.setBytes(1, encrypted);
+        stmt.setBytes(1, encrypted_pass);
         stmt.setBytes(2, iv);
         stmt.setInt(3, id);
 
         stmt.executeUpdate();
 
         wipeCharArray(newPassword);
-        wipeByteArray(encrypted);
+        wipeByteArray(encrypted_pass);
+    }
+
+    // ===== UPDATE USERNAME ===== --- I think this is obvious....
+    // per item username update
+    protected void updateUsername(Connection conn, int id, char[] newUsername) throws Exception {
+        byte[] iv = generateIV();
+        byte[] encrypted_pass = encrypt(newUsername, iv);
+
+        String sql = "UPDATE vault SET username = ?, iv = ? WHERE id = ?";
+        PreparedStatement stmt = conn.prepareStatement(sql);
+
+        stmt.setBytes(1, encrypted_pass);
+        stmt.setBytes(2, iv);
+        stmt.setInt(3, id);
+
+        stmt.executeUpdate();
+
+        wipeCharArray(newUsername);
+        wipeByteArray(encrypted_pass);
     }
 
     // ===== IV ===== Initialization Vector (IV)
     // a random value used during encryption so that the same input doesn’t produce the same hash output
+    // This runs/generates for us whenever new data set/cycle is saved
     private byte[] generateIV() {
         byte[] iv = new byte[IV_LENGTH];
         new SecureRandom().nextBytes(iv);

@@ -6,7 +6,7 @@ import java.sql.*;
 import java.util.List;
 
 public class GUI {
-    //public boolean DEBUG = true; //true or false set to false before production
+    public boolean DEBUG = false; //true or false set to false before production
 
     private Backend backend = new Backend();
     private Connection conn;
@@ -184,7 +184,7 @@ public class GUI {
         CREATE TABLE vault (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             tag TEXT,
-            username TEXT,
+            username BLOB,
             password BLOB,
             iv BLOB
         )
@@ -204,7 +204,7 @@ public class GUI {
         try {
             Backend.Credential c = credentials.get(row);
 
-            char[] password = backend.decryptPassword(c.encryptedPassword, c.iv);
+            char[] password = backend.decryptData(c.encryptedPassword, c.iv);
 
             JOptionPane.showMessageDialog(null, new String(password), "Password",
                     JOptionPane.INFORMATION_MESSAGE);
@@ -233,10 +233,7 @@ public class GUI {
 
         if (option == JOptionPane.OK_OPTION) {
             try {
-                backend.addEntry(conn,
-                        tagField.getText(),
-                        userField.getText(),
-                        passField.getPassword());
+                backend.addEntry(conn, tagField.getText(), userField.getText().toCharArray(), passField.getPassword());
 
                 credentials = backend.loadAll(conn);
                 refreshTable();
