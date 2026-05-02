@@ -30,10 +30,10 @@ This project is intended as a **learning-focused implementation** of a password 
 * Database: `vault.db` (SQLite)
 * Tables:
 
-  * `vault`: stores tag, encrypted username, encrypted password, IV
-  * `meta`: stores salt and future metadata
+  * `vault`: stores encrypted (tag, username, password), and IV
+  * `meta`: stores salt, encrypted vault username, and future metadata
 
-Usernames and Passwords are stored as encrypted binary blobs. Tags remain plaintext for usability.
+Tags, Usernames, and Passwords are stored as encrypted binary blobs.
 
 ---
 
@@ -63,7 +63,6 @@ No external database or installer required.
 ## ⚠️ Limitations
 
 * No auto-lock or session timeout
-* Tags are stored in plaintext
 * Uses PBKDF2 (Argon2 not yet implemented)
 
 ---

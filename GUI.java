@@ -183,7 +183,7 @@ public class GUI {
     stmt.execute("""
         CREATE TABLE vault (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tag TEXT,
+            tag BLOB,
             username BLOB,
             password BLOB,
             iv BLOB
@@ -233,7 +233,7 @@ public class GUI {
 
         if (option == JOptionPane.OK_OPTION) {
             try {
-                backend.addEntry(conn, tagField.getText(), userField.getText().toCharArray(), passField.getPassword());
+                backend.addEntry(conn, tagField.getText().toCharArray(), userField.getText().toCharArray(), passField.getPassword());
 
                 credentials = backend.loadAll(conn);
                 refreshTable();
