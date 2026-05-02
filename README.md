@@ -19,7 +19,7 @@ This project is intended as a **learning-focused implementation** of a password 
 * **Encryption:** AES-256-GCM (confidentiality + integrity)
 * **Key Derivation:** PBKDF2 with random salt (stored in database)
 * **Password Handling:** Stored in `char[]`, wiped from memory after use
-* **Per-entry IV:** Each password uses a unique random IV
+* **Per-entry IV:** Each username and password uses a unique random IV
 * **On-demand Decryption:** Passwords are only decrypted when requested
 * **No Master Password Storage:** Master password is never saved
 
@@ -30,10 +30,10 @@ This project is intended as a **learning-focused implementation** of a password 
 * Database: `vault.db` (SQLite)
 * Tables:
 
-  * `vault`: stores tag, username, encrypted password, IV
+  * `vault`: stores tag, encrypted username, encrypted password, IV
   * `meta`: stores salt and future metadata
 
-Passwords are stored as encrypted binary blobs. Usernames and tags remain plaintext for usability.
+Usernames and Passwords are stored as encrypted binary blobs. Tags remain plaintext for usability.
 
 ---
 
@@ -62,16 +62,15 @@ No external database or installer required.
 
 ## ⚠️ Limitations
 
-* No password verification mechanism (planned improvement)
 * No auto-lock or session timeout
-* Usernames/tags are stored in plaintext
+* Tags are stored in plaintext
 * Uses PBKDF2 (Argon2 not yet implemented)
 
 ---
 
 ## 🚀 Future Improvements
 
-* Master password verification (`vault_check`)
+* Master password verification (`vault_check`) (Using a username for the vault.)
 * Argon2 key derivation
 * Auto-lock on inactivity
 * Clipboard copy with auto-clear
@@ -99,7 +98,7 @@ No external database or installer required.
 
     Extract directory from the zip file. Run the following commands within the directory.
 
-        /In Folder
+        /In Folder Requirements
           Backend.java
           GUI.java
           sqlite-jdbc-3.53.0.0.jar
@@ -107,7 +106,11 @@ No external database or installer required.
 
         # Linux Install or edit code:
             cd java-password-vault
-            javac -cp ".:sqlite-jdbc-3.53.0.0.jar" -d go *.java
+                javac -cp ".:sqlite-jdbc-3.53.0.0.jar" -d go *.java
+
+                # or
+
+                ./build.sh -br  # Build and Run
             
 
         # Windows Install or edit code:
@@ -175,5 +178,3 @@ No external database or installer required.
                         Main-Class: GUI
                         Step 4 — Run
                         java -jar YourProject.jar
-
-            
