@@ -13,7 +13,7 @@ public class GUI {
     private DefaultTableModel model;
     private List<Backend.Credential> credentials;
 
-    public static void main(String[] args) throws Exception {
+    protected static void main(String[] args) throws Exception {
         SwingUtilities.invokeLater(() -> {
             try {
                 //System.out.println(System.getProperty("java.class.path"));
@@ -24,7 +24,7 @@ public class GUI {
         });
     }
 
-    public void start() throws Exception {
+    protected void start() throws Exception {
         java.io.File dbFile = new java.io.File("vault.db");
         boolean isNew = !dbFile.exists();
 
