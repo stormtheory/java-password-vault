@@ -1,6 +1,17 @@
 #!/usr/bin/bash
 cd "$(dirname "$0")"
 
+####################################################################
+##
+##                   LINUX ONLY
+##        Script is to make building, launching, 
+## and running easier with command line (CLI) arguments 
+##
+##               With Love, Stormtheory
+####################################################################
+
+
+
 # No running as root!
 ID=$(id -u)
 if [ "$ID" == '0'  ];then
@@ -17,11 +28,14 @@ Usage: $(basename "$0") [OPTIONS]
 
 Options:
   -d             Copy the tar to the downloads directory
-  -i             Runs the install-BloxBox.sh script after creating the tar file
+  -i             Runs the build function
+  -b             Runs the build function
+  -r             Starts the GUI program
+
   -h             Show this help message
 
 Example:
-  $0 -i
+  ./$0 -br
 EOF
 }
 
