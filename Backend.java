@@ -7,6 +7,7 @@ import java.sql.*;
 import java.util.*;
 
 public class Backend {
+    public boolean DEBUG = false; //true or false set to false before production
 
     // ===== CONFIG =====
     // Strength factors
@@ -31,7 +32,13 @@ public class Backend {
     // A salt is just random data added to a password before key derivation --- prevents Rainbow Table attacks
     protected void initialize(char[] masterPassword, byte[] salt) throws Exception {
         this.aesKey = deriveKey(masterPassword, salt);
+        if (DEBUG) {
+            System.out.println("[INIT] PASS: " + masterPassword.length * 8 + " | Salt: " + salt.length * 8);
+            System.out.println("[INIT] AESkey: " + this.aesKey);
+            System.out.println("[INIT] AESkey initialized: " + (this.aesKey != null) + " | algorithm: " + this.aesKey.getAlgorithm() + " | size: " + (this.aesKey.getEncoded().length * 8) + " bits");}
         wipeCharArray(masterPassword);
+        if (DEBUG) {System.out.println("[INIT] PASS: Wiped");}
+        
     }
 
     // ===== KEY DERIVATION ===== One of the most important parts!!!! 
