@@ -24,7 +24,6 @@ public class Backend {
         protected int id;
         protected String tag;
         protected String username;
-        protected byte[] encryptedUsername;
         protected byte[] encryptedPassword;
         protected byte[] iv;
     }
@@ -80,7 +79,7 @@ public class Backend {
         return result;
     }
 
-    // ===== DB LOAD (NO DECRYPTION HERE) ===== This just load the database to an Arraylist nothing is decrypted
+    // ===== DB LOAD ===== This just load the database to an Arraylist and decrypt Tag and Usernames
     protected List<Credential> loadAll(Connection conn) throws Exception {
         List<Credential> list = new ArrayList<>();
 
@@ -91,12 +90,12 @@ public class Backend {
         while (rs.next()) {
             Credential c = new Credential();
             c.id = rs.getInt("id");
-            c.tag = rs.getString("tag");
+            //c.tag = rs.getString("tag");
             //c.username = rs.getString("username");
             c.iv = rs.getBytes("iv");
+            c.tag = new String(decryptData(rs.getBytes("tag"), c.iv));
             c.username = new String(decryptData(rs.getBytes("username"), c.iv));
             c.encryptedPassword = rs.getBytes("password");
-            c.iv = rs.getBytes("iv");
 
             list.add(c);
         }
@@ -105,22 +104,27 @@ public class Backend {
     }
 
     // ===== ADD ENTRY =====  ---- Has to happen at some point?
-    protected void addEntry(Connection conn, String tag, char[] username, char[] password) throws Exception {
+    protected void addEntry(Connection conn, char[] tag, char[] username, char[] password) throws Exception {
         byte[] iv = generateIV();
+        byte[] encrypted_tag = encrypt(tag, iv);
         byte[] encrypted_username = encrypt(username, iv);
         byte[] encrypted_pass = encrypt(password, iv);
         
         String sql = "INSERT INTO vault(tag, username, password, iv) VALUES (?, ?, ?, ?)";
         PreparedStatement stmt = conn.prepareStatement(sql);
 
-        stmt.setString(1, tag);
+        stmt.setBytes(1, encrypted_tag);
         stmt.setBytes(2, encrypted_username);
         stmt.setBytes(3, encrypted_pass);
         stmt.setBytes(4, iv);
 
         stmt.executeUpdate();
 
+        wipeCharArray(username);
         wipeByteArray(encrypted_username);
+
+        wipeCharArray(tag);
+        wipeByteArray(encrypted_tag);
 
         wipeCharArray(password);
         wipeByteArray(encrypted_pass);
@@ -136,6 +140,7 @@ public class Backend {
 
     // ===== UPDATE PASSWORD ===== --- I think this is obvious....
     // per item password update
+    // Will need to update both Tag and Username as well
     protected void updatePassword(Connection conn, int id, char[] newPassword) throws Exception {
         byte[] iv = generateIV();
         byte[] encrypted_pass = encrypt(newPassword, iv);
@@ -155,6 +160,7 @@ public class Backend {
 
     // ===== UPDATE USERNAME ===== --- I think this is obvious....
     // per item username update
+    // Will need to update both Tag and Password as well
     protected void updateUsername(Connection conn, int id, char[] newUsername) throws Exception {
         byte[] iv = generateIV();
         byte[] encrypted_pass = encrypt(newUsername, iv);
