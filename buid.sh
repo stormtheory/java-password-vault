@@ -8,6 +8,7 @@ cd "$(dirname "$0")"
 ## and running easier with command line (CLI) arguments 
 ##
 ##               With Love, Stormtheory
+##
 ####################################################################
 
 
@@ -35,7 +36,7 @@ Options:
   -h             Show this help message
 
 Example:
-  ./$0 -br
+  $0 -br
 EOF
 }
 
