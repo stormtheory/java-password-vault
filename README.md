@@ -132,34 +132,31 @@ No external database or installer required.
 
 # Using Netbeans:
 ### What a NetBeans user needs to do
-        1. Create New Java Project
-            Java with ANT >> Java Appilcation >> NEXT >>
-            Project Name: JavaVault (or whatever) >> Select your locations and stuff >> Deselect Create Main Class >> Click Finish
+   1. `File` >> `New Project`
+      `Java with ANT` >> `Java Appilcation` >> `NEXT` >>
+      Project Name: `JavaVault` (or whatever) >> `Select your locations` >> `Deselect Create Main Class` >> Click `Finish`
             
-        2. Drag and drop the files below into your Source Packages under <default package>:
-                Backend.java
-                GUI.java
+   2. Drag and drop the files below into your Source Packages under \<default package>:
+      `Backend.java`
+      `GUI.java`
 
-        3. Add the SQLite driver
-            In NetBeans:
-            -Right-click Libraries
-            -Click Add JAR/Folder
-            Select:
-                sqlite-jdbc-3.53.0.0.jar
+   3. Add the SQLite driver
+      In NetBeans:
+         Right-click `Libraries` >> Click `Add JAR/Folder` >> Select:`sqlite-jdbc-3.53.0.0.jar`
 
-        4. May need to add:
-            Add JVM option in NetBeans
-                Right-click project (JavaVault)
-                Properties
-                Go to:
-                Run
-                In [VM Options], copy and paste in:
-                    --enable-native-access=ALL-UNNAMED
-                If you have a locked down (noexec) /tmp directory you will also need to add:
-                    -Djava.io.tmpdir=.
+   4. May need to add:
+      Add JVM option in NetBeans
+        Right-click project (JavaVault)
+          `Properties`
+          Go to:
+          `Run`
+          Look for a large box called `[VM Options]`, copy and paste in:
+               `--enable-native-access=ALL-UNNAMED`
+          If you have a locked down (noexec) /tmp directory you will also need to add:
+               `-Djava.io.tmpdir=.`
 
-        5. Click the green Play Button (Run Project)
-        6. Select GUI as your main class
+   5. Click the green Play Button (`Run Project`)
+   6. Select GUI as your main class
 
 ## Clean and Build:
 ### one JAR contains everything - run anywhere
