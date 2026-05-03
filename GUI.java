@@ -160,12 +160,11 @@ public class GUI {
                 // Password cannot be empty
                 JOptionPane.showMessageDialog(null, "Password cannot be empty!", 
                     "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
-
-            } else if (p1.length < 8) {
-                // Enforce minimum length
-                JOptionPane.showMessageDialog(null, "Password must be at least 8 characters!", 
-                    "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
-            } else {
+            // } else if (p1.length < 8) {
+            //     // Enforce minimum length
+            //     JOptionPane.showMessageDialog(null, "Password must be at least 8 characters!", 
+            //         "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
+             } else {
                 // All checks passed
                 passwordGood = true;
                 masterPassword = p1; 
@@ -195,15 +194,19 @@ public class GUI {
         if (passwordGood) {
             if (masterPassword != null && masterPassword.length != 0) {          
                 
+                
+
                 // ===== DB CONNECT =====
                 // Load the driver!!! Go!
                 Class.forName("org.sqlite.JDBC");
-                if (isNew) {
-                    initializeDatabase(conn);
-                }
+                
                 // Then connect - Got to connect to the database, best part auto-magically
                 conn = DriverManager.getConnection("jdbc:sqlite:" + vaultPath);
                 
+                if (isNew) {
+                    initializeDatabase(conn);
+                }
+
                 // ===== GET SALT ===== #### Pulled from vault.db radom to each vault
                 byte[] salt = getOrCreateSalt(conn);
                 if (DEBUG) {System.out.println("[GUI] get Salt: " + salt);}
@@ -214,7 +217,22 @@ public class GUI {
 
                 // ===== LOAD DATA =====
                 // Loads all data into an ArraryList (not decrypted)
+                
+                try {
                 credentials = backend.loadAll(conn);
+                 } catch (javax.crypto.AEADBadTagException e) {
+                    // Tag mismatch is when there is a wrong key or I guess corrupted data
+                    JOptionPane.showMessageDialog(null,
+                        "Failed to decrypt — wrong master password or corrupted data.",
+                        "Decryption Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
+                    if (DEBUG) e.printStackTrace();
+
+                } catch (Exception e) {
+                    JOptionPane.showMessageDialog(null,
+                        "Unexpected error reading password entry.",
+                        "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
+                    if (DEBUG) e.printStackTrace();
+                }
             } else {System.exit(1);}
         } else {System.exit(1);}
 
