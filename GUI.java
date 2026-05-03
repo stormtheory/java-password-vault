@@ -19,7 +19,7 @@ public class GUI {
     private char[] masterPassword = new char[0];
     public boolean passwordGood = false;
     private ImageIcon dialogIcon = null;
-    private Backend backend = new Backend();
+    protected Backend backend = new Backend();
     private Connection conn;
     private JTable table;
     private DefaultTableModel model;
@@ -237,11 +237,11 @@ public class GUI {
                 conn = DriverManager.getConnection("jdbc:sqlite:" + vaultPath);
 
                 if (isNew) {
-                    initializeDatabase(conn);
+                    backend.initializeDatabase(conn, "0", "s");
                 }
 
                 // ===== GET SALT ===== #### Pulled from vault.db radom to each vault
-                byte[] salt = getOrCreateSalt(conn);
+                byte[] salt = backend.getOrCreateSalt(conn);
                 if (DEBUG) {System.out.println("[GUI] get Salt: " + salt);}
                 
                 // ===== INIT BACKEND =====
@@ -277,7 +277,7 @@ public class GUI {
         JFrame frame = new JFrame("Password Vault");
         frame.setSize(600, 400);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        
+
         IdleTimeoutManager idleManager = new IdleTimeoutManager(frame, masterPassword);
         idleManager.start();
 
@@ -342,31 +342,6 @@ public class GUI {
                     "Show"
             });
         }
-    }
-
-
-    private void initializeDatabase(Connection conn) throws Exception {
-    Statement stmt = conn.createStatement();
-
-    // Vault table
-    stmt.execute("""
-        CREATE TABLE vault (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tag BLOB,
-            username BLOB,
-            password BLOB,
-            iv BLOB
-        )
-    """);
-
-    // Meta table (for salt)
-    stmt.execute("""
-        CREATE TABLE meta (
-            key TEXT PRIMARY KEY,
-            value BLOB,
-            vault_user BLOB
-        )
-    """);
     }
 
     // ===== COPY PASSWORD TO CLIPBOARD BUTTON =====
@@ -535,29 +510,4 @@ public class GUI {
                 return "Action"; // return value unused but must not be null
             }
         }
-
-
-    // ===== SALT HANDLING =====
-    // A salt is just random data added to a password before key derivation --- prevents Rainbow Table attacks
-    private byte[] getOrCreateSalt(Connection conn) throws Exception {
-        Statement stmt = conn.createStatement();
-
-        stmt.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value BLOB)");
-
-        PreparedStatement ps = conn.prepareStatement("SELECT value FROM meta WHERE key='salt'");
-        ResultSet rs = ps.executeQuery();
-
-        if (rs.next()) {
-            return rs.getBytes(1);
-        }
-
-        byte[] salt = new byte[16];
-        new java.security.SecureRandom().nextBytes(salt);
-
-        PreparedStatement insert = conn.prepareStatement("INSERT INTO meta(key,value) VALUES('salt',?)");
-        insert.setBytes(1, salt);
-        insert.executeUpdate();
-
-        return salt;
-    }
 }

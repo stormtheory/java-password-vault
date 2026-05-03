@@ -90,21 +90,22 @@ No external database or installer required.
 
 ## 🚀 Future Improvements
 
-* **Major Upgrades**
+**[ Major Upgrades ]**
 * Argon2 key derivation (More modern but not a rush)
+* Multi-User account option (Shared encryption key) (Good for legacy accounts or small business)
 
-* **New Features**
-* Multi-User account option (Shared encryption key)
+**[ New Features ]**
+* Changing Master Password
 * Search/filter functionality
 * Password Generator
 * Passphrase Generator
 * Password Changing
 
-* **Big Ticket Items**
+**[ Big Ticket Items ]**
 * Browser Extension for Firefox and Chrome
 * Import/Export from/to Bitwarden
 
-* **New Data Storage**
+**[ New Data Storage ]**
 * Passkeys
 * Secure Notes
 * Credit/Debt card data storage
@@ -216,3 +217,8 @@ No external database or installer required.
             On Linux run:
 
             ./build.sh -j
+
+
+## Database Versions
+**[ 0 ]** [Current]
+* Beta: |PBKDF2|AES256-GCM|SALT| Testing of new database ideas and expanding, expect to have to rebuild if something changes ina newer version, so keep your older versions until tested.
