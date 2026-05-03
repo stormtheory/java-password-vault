@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.io.File;
 import java.util.ArrayList;
+import java.lang.System;
 
 public class GUI {
     public boolean DEBUG = false; //true or false set to false before production
@@ -18,9 +19,28 @@ public class GUI {
     private Connection conn;
     private JTable table;
     private DefaultTableModel model;
-    private List<Backend.Credential> credentials;
+    private List<Backend.Credential> credentials = new ArrayList<>();
 
     public static void main(String[] args) throws Exception {
+        
+        if (System.getProperty("nativeAccessEnabled") == null) {
+        String java = ProcessHandle.current().info().command().orElse("java");
+        String classpath = System.getProperty("java.class.path");
+
+        // Relaunch the JVM with the required flags
+        ProcessBuilder pb = new ProcessBuilder(
+            java,
+            "--enable-native-access=ALL-UNNAMED",
+            "-Djava.io.tmpdir=" + System.getProperty("user.dir"),
+            "-DnativeAccessEnabled=true", // prevents infinite relaunch loop
+            "-cp", classpath,
+            "GUI"
+        );
+        pb.inheritIO(); // pass through all output/input
+        Process p = pb.start();
+        System.exit(p.waitFor()); // exit current process, return child exit code
+    }
+
         SwingUtilities.invokeLater(() -> {
             try {
                 //System.out.println(System.getProperty("java.class.path"));
@@ -37,31 +57,8 @@ public class GUI {
         java.io.File dbFile = new java.io.File(vaultPath);
         boolean isNew = !dbFile.exists();
 
-        // if (isNew) {
-        // int choice = JOptionPane.showConfirmDialog(null,
-        //     "No vault found. Create new vault?",
-        //     "First Run",
-        //     JOptionPane.YES_NO_OPTION);
-
-        // if (choice != JOptionPane.YES_OPTION) {
-        //     System.exit(0);
-        // }
-        // }
-
-        // ImageIcon dialogIcon = null;
-        // java.io.File iconFile = new java.io.File("icons/icon_256.png");
-        // if (iconFile.exists()) {
-        //     // Scale smoothly to 64px for use in dialogs
-        //     Image scaled = new ImageIcon(iconFile.getAbsolutePath())
-        //         .getImage()
-        //         .getScaledInstance(64, 64, Image.SCALE_SMOOTH);
-        //     dialogIcon = new ImageIcon(scaled);
-        // } else {
-        //     if (DEBUG) System.out.println("[GUI] Dialog icon not found: " + iconFile.getAbsolutePath());
-        // }
-        
         // ===== LOAD ICONS =====
-        // Load multiple sizes — OS picks the best one for taskbar, alt-tab, title bar etc.
+        // Load multiple sizes - OS picks the best one for taskbar, alt-tab, title bar etc.
             List<Image> icons = new ArrayList<>();
             ImageIcon dialogIcon = null;
 
@@ -74,7 +71,7 @@ public class GUI {
                     // Add each size to the list for the taskbar/title bar
                     icons.add(new ImageIcon(iconFile.getAbsolutePath()).getImage());
 
-                    // Use the 256px version for dialogs — only set it once when we find that file
+                    // Use the 256px version for dialogs - only set it once when we find that file
                     if (path.contains("256") && dialogIcon == null) {
                         Image scaled = new ImageIcon(iconFile.getAbsolutePath())
                             .getImage()
@@ -86,7 +83,7 @@ public class GUI {
                 }
             }
     
-        // ===== NO VAULT FOUND — ask to create new or locate existing =====
+        // ===== NO VAULT FOUND - ask to create new or locate existing =====
         if (isNew) {
             Object[] options = {"Create New Vault", "Locate Existing Vault", "Cancel"};
             int choice = JOptionPane.showOptionDialog(null,
@@ -94,16 +91,16 @@ public class GUI {
                 "Vault Not Found",
                 JOptionPane.YES_NO_CANCEL_OPTION,
                 JOptionPane.QUESTION_MESSAGE,
-                dialogIcon,  // ← your icon goes here, replaces the default ? icon
+                dialogIcon,
                 options,
                 options[0]);
 
             if (choice == 2 || choice == JOptionPane.CLOSED_OPTION) {
-                // User cancelled — exit cleanly
+                // User cancelled - exit cleanly
                 System.exit(0);
 
             } else if (choice == 1) {
-                // ===== FILE SELECTOR — locate existing vault =====
+                // ===== FILE SELECTOR - locate existing vault =====
                 JFileChooser fileChooser = new JFileChooser();
                 fileChooser.setDialogTitle("Locate your vault.db file");
                 fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
@@ -125,54 +122,57 @@ public class GUI {
 
         // ===== MASTER PASSWORD PROMPT =====
         char[] masterPassword = new char[0];
-
+        
         if (isNew) {
-            // ===== CREATE PASSWORD =====
-            // if no vault.db then prompt for a password and make a vault
-            JPasswordField pf1 = new JPasswordField();
-            JPasswordField pf2 = new JPasswordField();
+            while (true) {
+                // ===== CREATE PASSWORD =====
+                // if no vault.db then prompt for a password and make a vault
+                JPasswordField pf1 = new JPasswordField();
+                JPasswordField pf2 = new JPasswordField();
 
-            Object[] msg = {
-                    "Create Master Password:", pf1,
-                    "Confirm Password:", pf2
-            };
+                Object[] msg = {
+                        "Create Master Password:", pf1,
+                        "Confirm Password:", pf2
+                };
 
-            int ok = JOptionPane.showConfirmDialog(
-                    null,
-                    msg,
-                    "Create Master Password",
-                    JOptionPane.OK_CANCEL_OPTION,
-                    JOptionPane.PLAIN_MESSAGE
-            );
+                int ok = JOptionPane.showConfirmDialog(
+                        null,
+                        msg,
+                        "Create Master Password",
+                        JOptionPane.OK_CANCEL_OPTION,
+                        JOptionPane.PLAIN_MESSAGE
+                );
 
-            if (ok != JOptionPane.OK_OPTION) System.exit(0);
+                if (ok != JOptionPane.OK_OPTION) System.exit(0);
 
-            char[] p1 = pf1.getPassword();
-            char[] p2 = pf2.getPassword();
+                char[] p1 = pf1.getPassword();
+                char[] p2 = pf2.getPassword();
 
-            if (!java.util.Arrays.equals(p1, p2)) {
-                passwordGood = false;
-                JOptionPane.showMessageDialog(null, "Passwords do not match!");
-                Backend.wipeCharArray(p1);
+                if (!java.util.Arrays.equals(p1, p2)) {
+                    passwordGood = false;
+                    JOptionPane.showMessageDialog(null, "Passwords do not match!");
+                    Backend.wipeCharArray(p1);
+                    Backend.wipeCharArray(p2);
+                } else if (p1.length == 0) {
+                    // Password cannot be empty
+                    JOptionPane.showMessageDialog(null, "Password cannot be empty!", 
+                    "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
+                    Backend.wipeCharArray(p1);
+                    Backend.wipeCharArray(p2);
+                 } else if (p1.length < 8) {
+                    // Enforce minimum length
+                     JOptionPane.showMessageDialog(null, "Password must be at least 8 characters!", 
+                      "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
+                      Backend.wipeCharArray(p1);
+                      Backend.wipeCharArray(p2);
+                } else {
+                    // All checks passed
+                    passwordGood = true;
+                    masterPassword = p1;
+                    break;
+                }
                 Backend.wipeCharArray(p2);
-                System.exit(1);
-            } else if (p1.length == 0) {
-                // Password cannot be empty
-                JOptionPane.showMessageDialog(null, "Password cannot be empty!", 
-                    "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
-
-            } else if (p1.length < 8) {
-                // Enforce minimum length
-                JOptionPane.showMessageDialog(null, "Password must be at least 8 characters!", 
-                    "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
-            } else {
-                // All checks passed
-                passwordGood = true;
-                masterPassword = p1; 
             }
-            Backend.wipeCharArray(p1);
-            Backend.wipeCharArray(p2);
-            
 
         } else {
             // ===== AT STARTUP - ENTER PASSWORD =====
@@ -195,15 +195,19 @@ public class GUI {
         if (passwordGood) {
             if (masterPassword != null && masterPassword.length != 0) {          
                 
+                
+
                 // ===== DB CONNECT =====
                 // Load the driver!!! Go!
                 Class.forName("org.sqlite.JDBC");
+                
+                // Then connect - Got to connect to the database, best part auto-magically
+                conn = DriverManager.getConnection("jdbc:sqlite:" + vaultPath);
+
                 if (isNew) {
                     initializeDatabase(conn);
                 }
-                // Then connect - Got to connect to the database, best part auto-magically
-                conn = DriverManager.getConnection("jdbc:sqlite:" + vaultPath);
-                
+
                 // ===== GET SALT ===== #### Pulled from vault.db radom to each vault
                 byte[] salt = getOrCreateSalt(conn);
                 if (DEBUG) {System.out.println("[GUI] get Salt: " + salt);}
@@ -213,8 +217,25 @@ public class GUI {
                 backend.initialize(masterPassword, salt);
 
                 // ===== LOAD DATA =====
-                // Loads all data into an ArraryList (not decrypted)
+                // Loads all data into an ArraryList
+                
+                try {
                 credentials = backend.loadAll(conn);
+                 } catch (javax.crypto.AEADBadTagException e) {
+                    // Tag mismatch is when there is a wrong key or I guess corrupted data
+                    JOptionPane.showMessageDialog(null,
+                        "Failed to decrypt - wrong master password or corrupted data.",
+                        "Decryption Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
+                    if (DEBUG) e.printStackTrace();
+                    System.exit(1);
+
+                } catch (Exception e) {
+                    JOptionPane.showMessageDialog(null,
+                        "Unexpected error reading password entry.",
+                        "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
+                    if (DEBUG) e.printStackTrace();
+                    System.exit(1);
+                }
             } else {System.exit(1);}
         } else {System.exit(1);}
 
@@ -231,11 +252,11 @@ public class GUI {
             }
         };
 
-        // Apply icons to frame — must be done before setVisible(true)
+        // Apply icons to frame - must be done before setVisible(true)
         if (!icons.isEmpty()) {
             frame.setIconImages(icons);
         } else {
-            System.err.println("[GUI] Warning: No icons loaded — using default Java icon");
+            System.err.println("[GUI] Warning: No icons loaded - using default Java icon");
         }
 
         table = new JTable(model);

@@ -67,10 +67,11 @@ TAR_UP() {
 
 JAR(){
     # ===== Clean old build =====
-    rm -f bin/* fatjar PasswordVault.jar
+    rm -f bin/* JavaPasswordVault.jar
+    rm -rf fatjar 
 
     # ===== Compile =====
-    javac -cp "sqlite-jdbc-3.53.0.0.jar" -d bin GUI.java Backend.java
+    BUILD
 
     # ===== Build fat jar =====
     mkdir -p fatjar
@@ -84,7 +85,7 @@ JAR(){
     # ===== Package =====
     cd fatjar && jar cfm ../JavaPasswordVault.jar META-INF/MANIFEST.MF . && cd ..
 
-    echo "Done — run with: java -jar JavaPasswordVault.jar"
+    echo "#### Done #### run with: java -jar JavaPasswordVault.jar"
 }
 
 BUILD() {

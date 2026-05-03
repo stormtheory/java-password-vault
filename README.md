@@ -174,22 +174,6 @@ No external database or installer required.
             ✔ No extra files
             
             # FAT JAR
-            NetBeans does not do this by default:
+            On Linux run:
 
-            Step 1 — Extract SQLite JAR
-                Unzip:
-                sqlite-jdbc-3.53.0.0.jar
-            Step 2 — Merge into your JAR
-                Build your project
-                Open your generated JAR (zip tool)
-                Copy ALL contents from sqlite-jdbc into it
-            Step 3 — Ensure manifest is correct
-                Inside your JAR:
-
-                    META-INF/MANIFEST.MF
-
-                    Must include:
-
-                        Main-Class: GUI
-                        Step 4 — Run
-                        java -jar YourProject.jar
+            ./build.sh -j
