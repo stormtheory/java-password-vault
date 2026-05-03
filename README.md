@@ -1,4 +1,8 @@
-# 🔐  java-password-vault (Java + SQLite + AES-GCM)
+<div align="center"><img width="250" height="250" alt="Image" src="https://github.com/user-attachments/assets/76ae44a2-00a7-453a-8b75-595f184bd7a2" /></div>
+<h1 align="center">Java Password Vault</h1>
+<h3 align="center">(Java + SQLite + AES-GCM)</h3>
+
+<h4 align="center">Keeping secrets safe. Since April 2026</h4>
 
 ## Overview
 
@@ -11,6 +15,23 @@ The vault encrypts all stored data using **AES-256 in GCM mode**, with keys deri
 ## 🧠 Purpose
 
 This project is intended as a **learning-focused implementation** of a password manager, demonstrating real-world cryptographic practices such as authenticated encryption, secure key handling, and safe storage patterns.
+
+---
+<div align="center">
+
+<figure>
+  <img width="607" height="408" alt="Image" src="https://github.com/user-attachments/assets/b1f83315-dc38-411d-a1a8-30c0f2718d31" />
+  <figcaption>Main vault view</figcaption>
+</figure>
+
+---
+
+<figure>
+  <img width="610" height="239" alt="Image" src="https://github.com/user-attachments/assets/5bd6e4de-cf57-4d64-ad7a-243184abbaa9" />
+  <figcaption>What the data looks like stored. All data is not readable without the key.</figcaption>
+</figure>
+
+</div>
 
 ---
 
