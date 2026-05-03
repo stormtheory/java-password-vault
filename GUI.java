@@ -14,7 +14,7 @@ public class GUI {
     public boolean DEBUG = false; //true or false set to false before production
     
     public boolean passwordGood = false;
-
+    private ImageIcon dialogIcon = null;
     private Backend backend = new Backend();
     private Connection conn;
     private JTable table;
@@ -60,7 +60,6 @@ public class GUI {
         // ===== LOAD ICONS =====
         // Load multiple sizes - OS picks the best one for taskbar, alt-tab, title bar etc.
             List<Image> icons = new ArrayList<>();
-            ImageIcon dialogIcon = null;
 
             String[] iconSizes = {"icons/icon_16.png", "icons/icon_32.png",
                                 "icons/icon_64.png", "icons/icon_256.png"};
@@ -246,9 +245,9 @@ public class GUI {
         frame.setSize(600, 400);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
-        model = new DefaultTableModel(new Object[]{"ID", "Tag", "Username", "Password", "Action"}, 0) {
+        model = new DefaultTableModel(new Object[]{"ID", "Tag", "Username", "Password", "Actions"}, 0) {
             public boolean isCellEditable(int row, int column) {
-                return column == 4; // only button column
+                return column == 4 || column == 5; // this is for the Buttons // Copy and Show
             }
         };
 
@@ -267,9 +266,12 @@ public class GUI {
         table.getColumnModel().getColumn(0).setMinWidth(0);
         table.getColumnModel().getColumn(0).setMaxWidth(0);
 
-        // Button renderer/editor
-        table.getColumn("Action").setCellRenderer(new ButtonRenderer());
-        table.getColumn("Action").setCellEditor(new ButtonEditor(new JCheckBox()));
+        // ===== WIRE BOTH ACTION COLUMNS TOGETHER AND TO THE ACTIONS =====
+        // Widen both action columns slightly to fit two buttons in the renderer
+        table.setRowHeight(35);
+        table.getColumn("Actions").setPreferredWidth(150);
+        table.getColumn("Actions").setCellRenderer(new ButtonRenderer());
+        table.getColumn("Actions").setCellEditor(new ButtonEditor(new JCheckBox()));
 
         JScrollPane scroll = new JScrollPane(table);
 
@@ -300,6 +302,7 @@ public class GUI {
                     c.tag,
                     c.username,
                     "*****",
+                    "Copy",
                     "Show"
             });
         }
@@ -330,6 +333,34 @@ public class GUI {
     """);
     }
 
+    // ===== COPY PASSWORD TO CLIPBOARD BUTTON =====
+    private void copyPassword(int row) {
+        try {
+            Backend.Credential c = credentials.get(row);
+
+            char[] password = backend.decryptData(c.encryptedPassword, c.iv);
+
+            // This puts the password into system clipboard
+            java.awt.datatransfer.StringSelection selection =
+                new java.awt.datatransfer.StringSelection(new String(password));
+            java.awt.Toolkit.getDefaultToolkit()
+                .getSystemClipboard()
+                .setContents(selection, null);
+
+            // Make sure to wipe after
+            Backend.wipeCharArray(password);
+
+            // Tell the user it worked
+            JOptionPane.showMessageDialog(null,
+            "Password copied to clipboard.", "Copied",
+            JOptionPane.INFORMATION_MESSAGE, dialogIcon);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+
     // ===== SHOW PASSWORD BUTTON =====
     private void showPassword(int row) {
         try {
@@ -337,9 +368,11 @@ public class GUI {
 
             char[] password = backend.decryptData(c.encryptedPassword, c.iv);
 
+            // Creates a pop-up of the plain-text password
             JOptionPane.showMessageDialog(null, new String(password), "Password",
-                    JOptionPane.INFORMATION_MESSAGE);
+                    JOptionPane.INFORMATION_MESSAGE, dialogIcon);
 
+            // Make sure to wipe after
             Backend.wipeCharArray(password);
 
         } catch (Exception e) {
@@ -399,40 +432,64 @@ public class GUI {
     }
 
     // ===== BUTTON RENDERER =====
-    class ButtonRenderer extends JButton implements TableCellRenderer {
-        public ButtonRenderer() {
-            setText("Show");
-        }
+    // Renders a small panel with Copy and Show side by side for each row
+    class ButtonRenderer extends JPanel implements TableCellRenderer {
+    private final JButton copyBtn = new JButton("Copy");
+    private final JButton showBtn = new JButton("👁 Show");
+    
+    public ButtonRenderer() {
+        setLayout(new FlowLayout(FlowLayout.CENTER, 4, 2));
+        add(copyBtn);
+        add(showBtn);
+        setOpaque(true); // required so table background doesn't bleed through
+    }
 
-        public Component getTableCellRendererComponent(JTable table, Object value,
-                                                       boolean isSelected, boolean hasFocus,
-                                                       int row, int col) {
-            return this;
+    public Component getTableCellRendererComponent(JTable table, Object value,
+                                                   boolean isSelected, boolean hasFocus,
+                                                   int row, int col) {
+        // Match row selection highlight so panel doesn't look detached
+        setBackground(isSelected ? table.getSelectionBackground() : table.getBackground());
+        return this;
         }
     }
 
     // ===== BUTTON EDITOR =====
-    class ButtonEditor extends DefaultCellEditor {
-        private JButton button;
-        private int row;
+    // Single editor panel with both Show and Copy wired to their respective actions
+        class ButtonEditor extends DefaultCellEditor {
+            private final JPanel panel = new JPanel(new FlowLayout(FlowLayout.CENTER, 4, 2));
+            private final JButton copyBtn = new JButton("Copy");
+            private final JButton showBtn = new JButton("Show\nPassword");
+            private int row;
 
-        public ButtonEditor(JCheckBox checkBox) {
-            super(checkBox);
+            public ButtonEditor(JCheckBox checkBox) {
+                super(checkBox);
 
-            button = new JButton("Show");
-            button.addActionListener(e -> showPassword(row));
+                // Copy - silently writes decrypted password to clipboard, no dialog shown
+                copyBtn.addActionListener(e -> {
+                    fireEditingStopped(); // commit edit before clipboard write
+                    copyPassword(row);
+                });
+
+                // Show - reveals password in a dialog
+                showBtn.addActionListener(e -> {
+                    fireEditingStopped(); // commit edit before opening dialog
+                    showPassword(row);
+                });
+                panel.add(copyBtn);
+                panel.add(showBtn);
+            }
+
+            public Component getTableCellEditorComponent(JTable table, Object value,
+                                                        boolean isSelected, int row, int col) {
+                this.row = row; // capture row so both buttons know which credential to act on
+                return panel;
+            }
+
+            public Object getCellEditorValue() {
+                return "Action"; // return value unused but must not be null
+            }
         }
 
-        public Component getTableCellEditorComponent(JTable table, Object value,
-                                                     boolean isSelected, int row, int col) {
-            this.row = row;
-            return button;
-        }
-
-        public Object getCellEditorValue() {
-            return "Show";
-        }
-    }
 
     // ===== SALT HANDLING =====
     // A salt is just random data added to a password before key derivation --- prevents Rainbow Table attacks
