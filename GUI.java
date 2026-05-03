@@ -26,7 +26,6 @@ public class GUI {
     private List<Backend.Credential> credentials = new ArrayList<>();
 
     public static void main(String[] args) throws Exception {
-        
         if (System.getProperty("nativeAccessEnabled") == null) {
         String java = ProcessHandle.current().info().command().orElse("java");
         String classpath = System.getProperty("java.class.path");
@@ -130,7 +129,6 @@ public class GUI {
             System.out.println("[Shutdown Hook] Running cleanup command...");
  
             try {
-                
                 // SECURITY CRITICAL: Wipe master password from memory before JVM exits
                 // Prevents sensitive data staying in memory heap which mitigates memory dump attacks
                 Backend.wipeCharArray(masterPassword);
@@ -279,6 +277,9 @@ public class GUI {
         JFrame frame = new JFrame("Password Vault");
         frame.setSize(600, 400);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        
+        IdleTimeoutManager idleManager = new IdleTimeoutManager(frame, masterPassword);
+        idleManager.start();
 
         model = new DefaultTableModel(new Object[]{"ID", "Tag", "Username", "Password", "Actions"}, 0) {
             public boolean isCellEditable(int row, int column) {
