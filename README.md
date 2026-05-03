@@ -4,7 +4,7 @@
 
 This project is a **secure, minimal password vault** built in Java using Swing for the GUI and SQLite for storage. It is designed to demonstrate core security concepts while remaining lightweight and easy to run with only a standard JDK and a single dependency.
 
-The vault encrypts all stored passwords using **AES-256 in GCM mode**, with keys derived from a user-provided master password and a salted key derivation function. Sensitive data is only decrypted in memory when explicitly requested by the user, minimizing exposure.
+The vault encrypts all stored data using **AES-256 in GCM mode**, with keys derived from a user-provided master password and a salted key derivation function. Sensitive data is only decrypted in memory when explicitly requested by the user, minimizing exposure.
 
 ---
 
@@ -41,11 +41,12 @@ Tags, Usernames, and Passwords are stored as encrypted binary blobs.
 
 * Master password prompt on startup
 * Create new vault on first run
-* Add new entries (tag, username, password)
+* Add new entries (tag/url, username, password)
 * View stored entries (passwords hidden by default)
 * Reveal password on demand
 * Delete entries with confirmation
 * Cross-platform support (Windows / Linux / macOS)
+* Standalone compiled .jar executable
 
 ---
 
@@ -64,17 +65,17 @@ No external database or installer required.
 
 * No auto-lock or session timeout
 * Uses PBKDF2 (Argon2 not yet implemented)
+* Memory may not be fully cleared, always a risk, but data is always encrypted on disk. (Work around: turn off swap space)(Reboot/Shutdown of your machine clears the memory)
 
 ---
 
 ## 🚀 Future Improvements
 
-* Master password verification (`vault_check`) (Using a username for the vault.)
 * Argon2 key derivation
 * Auto-lock on inactivity
 * Clipboard copy with auto-clear
 * Search/filter functionality
-* Packaging into standalone executable
+
 
 ---
 ## 🖥️ Platforms Supported
@@ -134,13 +135,15 @@ No external database or installer required.
 ### What a NetBeans user needs to do
     YourProject/
     ├── src/
-    │   └── icons/          ← put your PNGs HERE
-    │       ├── icon_16.png
-    │       ├── icon_32.png
-    │       └── icon_256.png
+    │   └── icons/
+    │   |    ├── icon_16.png
+    │   |    ├── icon_32.png
+    │   |    └── icon_256.png
+    |   └── GUI.java
+    |   └── Backend.java
     └── build/
 
-   1. `File` >> `New Project`
+   1. `File` >> `New Project` >> 
       `Java with ANT` >> `Java Appilcation` >> `NEXT` >>
       Project Name: `JavaVault` (or whatever) >> `Select your locations` >> `Deselect Create Main Class` >> Click `Finish`
             
