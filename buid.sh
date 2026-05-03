@@ -32,6 +32,7 @@ Options:
   -i             Runs the build function
   -b             Runs the build function
   -r             Starts the GUI program
+  -j             Create Jar file
 
   -h             Show this help message
 
@@ -64,6 +65,28 @@ TAR_UP() {
         fi
 }
 
+JAR(){
+    # ===== Clean old build =====
+    rm -f bin/* fatjar PasswordVault.jar
+
+    # ===== Compile =====
+    javac -cp "sqlite-jdbc-3.53.0.0.jar" -d bin GUI.java Backend.java
+
+    # ===== Build fat jar =====
+    mkdir -p fatjar
+    cp -r bin/* fatjar/
+    cd fatjar && jar xf ../sqlite-jdbc-3.53.0.0.jar && cd ..
+
+    # ===== Write manifest =====
+    mkdir -p fatjar/META-INF
+    printf 'Manifest-Version: 1.0\nMain-Class: GUI\n\n' > fatjar/META-INF/MANIFEST.MF
+
+    # ===== Package =====
+    cd fatjar && jar cfm ../JavaPasswordVault.jar META-INF/MANIFEST.MF . && cd ..
+
+    echo "Done — run with: java -jar JavaPasswordVault.jar"
+}
+
 BUILD() {
         rm -f ./bin/*
         echo 'javac -cp ".:sqlite-jdbc-3.53.0.0.jar" -d bin *.java'
@@ -77,12 +100,16 @@ RUN(){
 
 HELP=true
 # 🔍 Parse options
-while getopts ":idbrh" opt; do
+while getopts ":ijdbrh" opt; do
   case ${opt} in
     d)
         TAR_UP=true
         DOWNLOADS=true
         HELP=false
+        ;;
+    j)  
+        JAR
+        exit
         ;;
     i)
         BUILD=true
