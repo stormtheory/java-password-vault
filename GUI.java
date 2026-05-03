@@ -2,11 +2,17 @@ import javax.swing.*;
 import javax.swing.table.*;
 import java.awt.*;
 import java.awt.event.*;
+import java.io.File;
 import java.sql.*;
+import java.util.ArrayList;
 import java.util.List;
+import java.io.File;
+import java.util.ArrayList;
 
 public class GUI {
     public boolean DEBUG = false; //true or false set to false before production
+    
+    public boolean passwordGood = false;
 
     private Backend backend = new Backend();
     private Connection conn;
@@ -14,7 +20,7 @@ public class GUI {
     private DefaultTableModel model;
     private List<Backend.Credential> credentials;
 
-    protected static void main(String[] args) throws Exception {
+    public static void main(String[] args) throws Exception {
         SwingUtilities.invokeLater(() -> {
             try {
                 //System.out.println(System.getProperty("java.class.path"));
@@ -26,37 +32,99 @@ public class GUI {
     }
 
     protected void start() throws Exception {
-        java.io.File dbFile = new java.io.File("vault.db");
+        //java.io.File dbFile = new java.io.File("vault.db");
+        String vaultPath = System.getProperty("user.home") + "/Documents/vault.db";
+        java.io.File dbFile = new java.io.File(vaultPath);
         boolean isNew = !dbFile.exists();
 
-        if (isNew) {
-        int choice = JOptionPane.showConfirmDialog(null,
-            "No vault found. Create new vault?",
-            "First Run",
-            JOptionPane.YES_NO_OPTION);
+        // if (isNew) {
+        // int choice = JOptionPane.showConfirmDialog(null,
+        //     "No vault found. Create new vault?",
+        //     "First Run",
+        //     JOptionPane.YES_NO_OPTION);
 
-        if (choice != JOptionPane.YES_OPTION) {
-            System.exit(0);
-        }
-        }
-    
-        // ===== DB CONNECT =====
-        // Load the driver!!! Go!
-        Class.forName("org.sqlite.JDBC");
+        // if (choice != JOptionPane.YES_OPTION) {
+        //     System.exit(0);
+        // }
+        // }
 
-        // Then connect - Got to connect to the database, best part auto-magically
-        conn = DriverManager.getConnection("jdbc:sqlite:vault.db");
+        // ImageIcon dialogIcon = null;
+        // java.io.File iconFile = new java.io.File("icons/icon_256.png");
+        // if (iconFile.exists()) {
+        //     // Scale smoothly to 64px for use in dialogs
+        //     Image scaled = new ImageIcon(iconFile.getAbsolutePath())
+        //         .getImage()
+        //         .getScaledInstance(64, 64, Image.SCALE_SMOOTH);
+        //     dialogIcon = new ImageIcon(scaled);
+        // } else {
+        //     if (DEBUG) System.out.println("[GUI] Dialog icon not found: " + iconFile.getAbsolutePath());
+        // }
         
-        if (isNew) {
-            initializeDatabase(conn);
-        }
+        // ===== LOAD ICONS =====
+        // Load multiple sizes — OS picks the best one for taskbar, alt-tab, title bar etc.
+            List<Image> icons = new ArrayList<>();
+            ImageIcon dialogIcon = null;
 
-        // ===== GET SALT ===== #### Pulled from vault.db radom to each vault
-        byte[] salt = getOrCreateSalt(conn);
-        if (DEBUG) {System.out.println("[GUI] get Salt: " + salt);}
+            String[] iconSizes = {"icons/icon_16.png", "icons/icon_32.png",
+                                "icons/icon_64.png", "icons/icon_256.png"};
+
+            for (String path : iconSizes) {
+                File iconFile = new File(path);
+                if (iconFile.exists()) {
+                    // Add each size to the list for the taskbar/title bar
+                    icons.add(new ImageIcon(iconFile.getAbsolutePath()).getImage());
+
+                    // Use the 256px version for dialogs — only set it once when we find that file
+                    if (path.contains("256") && dialogIcon == null) {
+                        Image scaled = new ImageIcon(iconFile.getAbsolutePath())
+                            .getImage()
+                            .getScaledInstance(64, 64, Image.SCALE_SMOOTH); // scale down for dialogs
+                        dialogIcon = new ImageIcon(scaled);
+                    }
+                } else {
+                    if (DEBUG) System.out.println("[GUI] Icon not found: " + iconFile.getAbsolutePath());
+                }
+            }
+    
+        // ===== NO VAULT FOUND — ask to create new or locate existing =====
+        if (isNew) {
+            Object[] options = {"Create New Vault", "Locate Existing Vault", "Cancel"};
+            int choice = JOptionPane.showOptionDialog(null,
+                "No vault found in Documents.\nCreate a new vault or locate an existing one?",
+                "Vault Not Found",
+                JOptionPane.YES_NO_CANCEL_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                dialogIcon,  // ← your icon goes here, replaces the default ? icon
+                options,
+                options[0]);
+
+            if (choice == 2 || choice == JOptionPane.CLOSED_OPTION) {
+                // User cancelled — exit cleanly
+                System.exit(0);
+
+            } else if (choice == 1) {
+                // ===== FILE SELECTOR — locate existing vault =====
+                JFileChooser fileChooser = new JFileChooser();
+                fileChooser.setDialogTitle("Locate your vault.db file");
+                fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
+                    "SQLite Database (*.db)", "db")); // only show .db files
+                fileChooser.setCurrentDirectory(new java.io.File(
+                    System.getProperty("user.home") + "/Documents")); // start in Documents
+
+                int result = fileChooser.showOpenDialog(null);
+
+                if (result == JFileChooser.APPROVE_OPTION) {
+                    vaultPath = fileChooser.getSelectedFile().getAbsolutePath();
+                    dbFile = new java.io.File(vaultPath);
+                    isNew = false;
+                } else {
+                    System.exit(1);
+                }
+            }
+        }
 
         // ===== MASTER PASSWORD PROMPT =====
-        char[] masterPassword;
+        char[] masterPassword = new char[0];
 
         if (isNew) {
             // ===== CREATE PASSWORD =====
@@ -83,14 +151,28 @@ public class GUI {
             char[] p2 = pf2.getPassword();
 
             if (!java.util.Arrays.equals(p1, p2)) {
+                passwordGood = false;
                 JOptionPane.showMessageDialog(null, "Passwords do not match!");
                 Backend.wipeCharArray(p1);
                 Backend.wipeCharArray(p2);
-                System.exit(0);
-            }
+                System.exit(1);
+            } else if (p1.length == 0) {
+                // Password cannot be empty
+                JOptionPane.showMessageDialog(null, "Password cannot be empty!", 
+                    "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
 
-            masterPassword = p1;
+            } else if (p1.length < 8) {
+                // Enforce minimum length
+                JOptionPane.showMessageDialog(null, "Password must be at least 8 characters!", 
+                    "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
+            } else {
+                // All checks passed
+                passwordGood = true;
+                masterPassword = p1; 
+            }
+            Backend.wipeCharArray(p1);
             Backend.wipeCharArray(p2);
+            
 
         } else {
             // ===== AT STARTUP - ENTER PASSWORD =====
@@ -107,15 +189,35 @@ public class GUI {
             if (ok != JOptionPane.OK_OPTION) System.exit(0);
 
             masterPassword = pf.getPassword();
+            passwordGood = true;
         }
 
-        // ===== INIT BACKEND =====
-        // A salt is just random data added to a password before key derivation --- prevents Rainbow Table attacks
-        backend.initialize(masterPassword, salt);
+        if (passwordGood) {
+            if (masterPassword != null && masterPassword.length != 0) {          
+                
+                // ===== DB CONNECT =====
+                // Load the driver!!! Go!
+                Class.forName("org.sqlite.JDBC");
+                if (isNew) {
+                    initializeDatabase(conn);
+                }
+                // Then connect - Got to connect to the database, best part auto-magically
+                conn = DriverManager.getConnection("jdbc:sqlite:" + vaultPath);
+                
+                // ===== GET SALT ===== #### Pulled from vault.db radom to each vault
+                byte[] salt = getOrCreateSalt(conn);
+                if (DEBUG) {System.out.println("[GUI] get Salt: " + salt);}
+                
+                // ===== INIT BACKEND =====
+                // A salt is just random data added to a password before key derivation --- prevents Rainbow Table attacks
+                backend.initialize(masterPassword, salt);
 
-        // ===== LOAD DATA =====
-        // Loads all data into an ArraryList (not decrypted)
-        credentials = backend.loadAll(conn);
+                // ===== LOAD DATA =====
+                // Loads all data into an ArraryList (not decrypted)
+                credentials = backend.loadAll(conn);
+            } else {System.exit(1);}
+        } else {System.exit(1);}
+
 
         // ===== BUILD UI =====
         // If we build it, they will come...
@@ -128,6 +230,13 @@ public class GUI {
                 return column == 4; // only button column
             }
         };
+
+        // Apply icons to frame — must be done before setVisible(true)
+        if (!icons.isEmpty()) {
+            frame.setIconImages(icons);
+        } else {
+            System.err.println("[GUI] Warning: No icons loaded — using default Java icon");
+        }
 
         table = new JTable(model);
 
@@ -194,7 +303,8 @@ public class GUI {
     stmt.execute("""
         CREATE TABLE meta (
             key TEXT PRIMARY KEY,
-            value BLOB
+            value BLOB,
+            vault_user BLOB
         )
     """);
     }
