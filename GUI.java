@@ -350,9 +350,19 @@ public class GUI {
             // Make sure to wipe after
             Backend.wipeCharArray(password);
 
+                // Auto-clears clipboard after 60s
+                // THIS WAS PRETTY COOL TO SEE HOW TO MAKE A THREAD IN JAVA!
+                javax.swing.Timer wipeclip = new javax.swing.Timer(60_000, ev -> {
+                    java.awt.Toolkit.getDefaultToolkit()
+                        .getSystemClipboard()
+                        .setContents(new java.awt.datatransfer.StringSelection(""), null);
+                });
+                wipeclip.setRepeats(false); // fire once only, not on a loop
+                wipeclip.start();
+
             // Tell the user it worked
             JOptionPane.showMessageDialog(null,
-            "Password copied to clipboard.", "Copied",
+            "Password copied to clipboard.\n  Clipboard will clear in 1 minute.", "Copied",
             JOptionPane.INFORMATION_MESSAGE, dialogIcon);
 
         } catch (Exception e) {

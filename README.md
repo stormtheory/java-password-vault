@@ -73,7 +73,6 @@ No external database or installer required.
 
 * Argon2 key derivation
 * Auto-lock on inactivity
-* Clipboard copy with auto-clear
 * Search/filter functionality
 
 
