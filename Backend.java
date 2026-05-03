@@ -200,4 +200,88 @@ public class Backend {
             Arrays.fill(data, (byte) 0);
         }
     }
+
+
+    protected void initializeDatabase(Connection conn, String version, String type) throws Exception {
+        Statement stmt = conn.createStatement();
+
+        // Vault table
+        stmt.execute("""
+            CREATE TABLE vault (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tag BLOB,
+                username BLOB,
+                password BLOB,
+                iv BLOB
+            )
+        """);
+
+        // Meta table (for salt)
+        stmt.execute("""
+            CREATE TABLE meta (
+                key TEXT PRIMARY KEY,
+                Bvalue BLOB,
+                Tvalue Text
+            )
+        """);
+        
+        try (PreparedStatement insert = conn.prepareStatement(
+            "INSERT INTO meta(key,Tvalue) VALUES(?,?)")) {
+
+                // Schema version — for future migrations
+                insert.setString(1, "version");
+                insert.setString(2, version);
+                insert.addBatch();
+
+                // Database type identifier
+                insert.setString(1, "type");
+                insert.setString(2, type);
+                insert.addBatch();
+
+                // Execute all inserts in one round-trip to the database
+                insert.executeBatch();
+            }
+        }
+
+        // ===== SALT HANDLING =====
+        // A salt is just random data added to a password before key derivation --- prevents Rainbow Table attacks
+        protected byte[] getOrCreateSalt(Connection conn) throws Exception {
+            Statement stmt = conn.createStatement();
+
+            stmt.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value BLOB)");
+
+            PreparedStatement ps = conn.prepareStatement("SELECT Bvalue FROM meta WHERE key='salt'");
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                return rs.getBytes(1);
+            }
+
+            byte[] salt = new byte[16];
+            new java.security.SecureRandom().nextBytes(salt);
+
+            try (PreparedStatement insert = conn.prepareStatement(
+            "INSERT INTO meta(key,Bvalue) VALUES(?,?)")) {
+
+                // Salt — stored as bytes
+                insert.setString(1, "salt");
+                insert.setBytes(2, salt);
+                insert.addBatch(); // Queue rather than execute immediately
+
+                // // Future Expansion - Multiusers (Playing a game of which password goes with which user)
+                // insert.setString(1, "vault_user1");
+                // insert.setString(2, "s");
+                // insert.addBatch();
+
+                // // Future Expansion - Multiusers (Each user will encrypt the shared key with their own password)
+                // insert.setString(1, "shared_key1");
+                // insert.setString(2, "s");
+                // insert.addBatch();
+
+                // Execute all inserts in one round-trip to the database
+                insert.executeBatch();
+            }
+
+            return salt;
+        }
 }

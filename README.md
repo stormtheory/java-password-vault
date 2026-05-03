@@ -1,12 +1,12 @@
 <div align="center"><img width="250" height="250" alt="Image" src="https://github.com/user-attachments/assets/76ae44a2-00a7-453a-8b75-595f184bd7a2" /></div>
 <h1 align="center">Java Password Vault</h1>
-<h3 align="center">(Java + SQLite + AES-GCM)</h3>
+<h3 align="center">(Java + SQLite + AES-GCM + Post Quantum Resistant)</h3>
 
 <h4 align="center">Keeping secrets safe. Since April 2026</h4>
 
 ## Overview
 
-This project is a **secure, minimal password vault** built in Java using Swing for the GUI and SQLite for storage. It is designed to demonstrate core security concepts while remaining lightweight and easy to run with only a standard JDK and a single dependency.
+This project is a **secure, minimal password vault** built in Java using Swing for the GUI and SQLite3 for storage. It is designed to demonstrate core security concepts while remaining lightweight and easy to run with only a standard JDK and a single dependency in one neat package (.jar). Post Quantum Resistant using AES-256-GCM according to NIST and other Cybersecurity Experts.
 
 The vault encrypts all stored data using **AES-256 in GCM mode**, with keys derived from a user-provided master password and a salted key derivation function. Sensitive data is only decrypted in memory when explicitly requested by the user, minimizing exposure.
 
@@ -35,14 +35,25 @@ This project is intended as a **learning-focused implementation** of a password 
 
 ---
 
-## 🔒 Security Design Summary
+## 🖥️ Features and Design
 
-* **Encryption:** AES-256-GCM (confidentiality + integrity)
+* **Encryption:** AES-256-GCM (confidentiality + integrity) (Post Quantum Resistant)
 * **Key Derivation:** PBKDF2 with random salt (stored in database)
 * **Password Handling:** Stored in `char[]`, wiped from memory after use
 * **Per-entry IV:** Each username and password uses a unique random IV
-* **On-demand Decryption:** Passwords are only decrypted when requested
+
+* **Master Password Prompt at start-up**
+* **Create vault at first start-up**
+* **Entry controls:** Add (tag/url, username, password), delete, copy and reveal passwords
+* **On-demand Decryption:** Passwords are only decrypted when requested to copy or show
 * **No Master Password Storage:** Master password is never saved
+* **All data is encrypted:** Using AES256-GCM which is Post Quantum Resistant
+
+* **Cross-platform support (Windows / Linux / macOS)** Java is cross-platform compatible and this project is devoted to keeping it that way.
+* **Standalone compiled .jar executable**
+
+* **Shutdown Hook:** Master password is cleared from memory before program is shutdown if NOT by `kill -9` or `Force End`
+* **Idle Session Timeout:** App will close if idle for 10 minutes, locking the vault
 
 ---
 
@@ -55,19 +66,6 @@ This project is intended as a **learning-focused implementation** of a password 
   * `meta`: stores salt, encrypted vault username, and future metadata
 
 Tags, Usernames, and Passwords are stored as encrypted binary blobs.
-
----
-
-## 🖥️ Features
-
-* Master password prompt on startup
-* Create new vault on first run
-* Add new entries (tag/url, username, password)
-* View stored entries (passwords hidden by default)
-* Reveal password on demand
-* Delete entries with confirmation
-* Cross-platform support (Windows / Linux / macOS)
-* Standalone compiled .jar executable
 
 ---
 
@@ -84,21 +82,37 @@ No external database or installer required.
 
 ## ⚠️ Limitations
 
-* No auto-lock or session timeout
 * Uses PBKDF2 (Argon2 not yet implemented)
 * Memory may not be fully cleared, always a risk, but data is always encrypted on disk. (Work around: turn off swap space)(Reboot/Shutdown of your machine clears the memory)
+* Will not save you from keyloggers or other kinds of malware but will keep the data safe if the vault is closed.
 
 ---
 
 ## 🚀 Future Improvements
 
-* Argon2 key derivation
-* Auto-lock on inactivity
-* Search/filter functionality
+**[ Major Upgrades ]**
+* Argon2 key derivation (More modern but not a rush)
+* Multi-User account option (Shared encryption key) (Good for legacy accounts or small business)
 
+**[ New Features ]**
+* Changing Master Password
+* Search/filter functionality
+* Password Generator
+* Passphrase Generator
+* Password Changing
+
+**[ Big Ticket Items ]**
+* Browser Extension for Firefox and Chrome
+* Import/Export from/to Bitwarden
+
+**[ New Data Storage ]**
+* Passkeys
+* Secure Notes
+* Credit/Debt card data storage
+* Address data storage
 
 ---
-## 🖥️ Platforms Supported
+## 🖥️ Platforms Supported (Tested On)
 
     ✅ Debian 11+
     ✅ Ubuntu 20.04/22.04+
@@ -110,9 +124,12 @@ No external database or installer required.
 ## INSTALL:
 1) Download the latest released .deb package files off of github at https://github.com/stormtheory/java-password-vault/releases and install on your system.
 
-          Not supported yet, see manual install.
+          #### Windows/Linux/MacOS ####
+          # Download then execute like normal or use Linux command:
 
-3) Manual Install without Package Manager, run commands:
+          java -jar JavaPasswordVault-*.jar
+
+2) Manual Install without Package Manager, run commands:
 
     Download the zip file of the code, off of Github. This is found under the [<> Code] button on https://github.com/stormtheory/java-password-vault.
 
@@ -200,3 +217,8 @@ No external database or installer required.
             On Linux run:
 
             ./build.sh -j
+
+
+## Database Versions
+**[ 0 ]** [Current]
+* Beta: |PBKDF2|AES256-GCM|SALT| Testing of new database ideas and expanding, expect to have to rebuild if something changes ina newer version, so keep your older versions until tested.

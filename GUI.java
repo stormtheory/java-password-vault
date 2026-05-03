@@ -12,17 +12,20 @@ import java.lang.System;
 
 public class GUI {
     public boolean DEBUG = false; //true or false set to false before production
+    boolean isWindows = System.getProperty("os.name")
+                         .toLowerCase()
+                         .startsWith("windows");
     
+    private char[] masterPassword = new char[0];
     public boolean passwordGood = false;
     private ImageIcon dialogIcon = null;
-    private Backend backend = new Backend();
+    protected Backend backend = new Backend();
     private Connection conn;
     private JTable table;
     private DefaultTableModel model;
     private List<Backend.Credential> credentials = new ArrayList<>();
 
     public static void main(String[] args) throws Exception {
-        
         if (System.getProperty("nativeAccessEnabled") == null) {
         String java = ProcessHandle.current().info().command().orElse("java");
         String classpath = System.getProperty("java.class.path");
@@ -119,9 +122,40 @@ public class GUI {
             }
         }
 
-        // ===== MASTER PASSWORD PROMPT =====
-        char[] masterPassword = new char[0];
+// ===== MASTER PASSWORD PROMPT =====
         
+        // ======= HOOK for SHUTDOWN =======
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("[Shutdown Hook] Running cleanup command...");
+ 
+            try {
+                // SECURITY CRITICAL: Wipe master password from memory before JVM exits
+                // Prevents sensitive data staying in memory heap which mitigates memory dump attacks
+                Backend.wipeCharArray(masterPassword);
+
+                // Using ProcessBuilder is safer than Runtime.exec() — avoids shell injection
+                // Say goodnight to tell me we are gracefully shutdown.
+                ProcessBuilder pb = isWindows
+                    ? new ProcessBuilder("cmd.exe", "/c", "Goodbye...")
+                    : new ProcessBuilder("echo", "Goodbye...");
+                    // e.g. "bash", "-c", "your-script.sh"
+                    // e.g. "python3", "/opt/cleanup.py"
+ 
+                // Inherit stdout/stderr so output is visible in the terminal
+                pb.inheritIO();
+ 
+                Process process = pb.start();
+                int exitCode = process.waitFor();
+ 
+                System.out.println(exitCode);
+ 
+            } catch (Exception e) {
+                // Log but don't rethrow — throwing inside a hook is silently ignored
+                System.err.println("[Shutdown Hook] Failed to run command: " + e.getMessage());
+            }
+        }, "shutdown-hook-thread"));
+
+
         if (isNew) {
             while (true) {
                 // ===== CREATE PASSWORD =====
@@ -144,30 +178,29 @@ public class GUI {
 
                 if (ok != JOptionPane.OK_OPTION) System.exit(0);
 
-                char[] p1 = pf1.getPassword();
+                masterPassword = pf1.getPassword();
                 char[] p2 = pf2.getPassword();
 
-                if (!java.util.Arrays.equals(p1, p2)) {
+                if (!java.util.Arrays.equals(masterPassword, p2)) {
                     passwordGood = false;
                     JOptionPane.showMessageDialog(null, "Passwords do not match!");
-                    Backend.wipeCharArray(p1);
+                    Backend.wipeCharArray(masterPassword);
                     Backend.wipeCharArray(p2);
-                } else if (p1.length == 0) {
+                } else if (masterPassword.length == 0) {
                     // Password cannot be empty
                     JOptionPane.showMessageDialog(null, "Password cannot be empty!", 
                     "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
-                    Backend.wipeCharArray(p1);
+                    Backend.wipeCharArray(masterPassword);
                     Backend.wipeCharArray(p2);
-                 } else if (p1.length < 8) {
+                 } else if (masterPassword.length < 8) {
                     // Enforce minimum length
                      JOptionPane.showMessageDialog(null, "Password must be at least 8 characters!", 
                       "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
-                      Backend.wipeCharArray(p1);
+                      Backend.wipeCharArray(masterPassword);
                       Backend.wipeCharArray(p2);
                 } else {
                     // All checks passed
                     passwordGood = true;
-                    masterPassword = p1;
                     break;
                 }
                 Backend.wipeCharArray(p2);
@@ -204,11 +237,11 @@ public class GUI {
                 conn = DriverManager.getConnection("jdbc:sqlite:" + vaultPath);
 
                 if (isNew) {
-                    initializeDatabase(conn);
+                    backend.initializeDatabase(conn, "0", "s");
                 }
 
                 // ===== GET SALT ===== #### Pulled from vault.db radom to each vault
-                byte[] salt = getOrCreateSalt(conn);
+                byte[] salt = backend.getOrCreateSalt(conn);
                 if (DEBUG) {System.out.println("[GUI] get Salt: " + salt);}
                 
                 // ===== INIT BACKEND =====
@@ -244,6 +277,9 @@ public class GUI {
         JFrame frame = new JFrame("Password Vault");
         frame.setSize(600, 400);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+        IdleTimeoutManager idleManager = new IdleTimeoutManager(frame, masterPassword);
+        idleManager.start();
 
         model = new DefaultTableModel(new Object[]{"ID", "Tag", "Username", "Password", "Actions"}, 0) {
             public boolean isCellEditable(int row, int column) {
@@ -306,31 +342,6 @@ public class GUI {
                     "Show"
             });
         }
-    }
-
-
-    private void initializeDatabase(Connection conn) throws Exception {
-    Statement stmt = conn.createStatement();
-
-    // Vault table
-    stmt.execute("""
-        CREATE TABLE vault (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tag BLOB,
-            username BLOB,
-            password BLOB,
-            iv BLOB
-        )
-    """);
-
-    // Meta table (for salt)
-    stmt.execute("""
-        CREATE TABLE meta (
-            key TEXT PRIMARY KEY,
-            value BLOB,
-            vault_user BLOB
-        )
-    """);
     }
 
     // ===== COPY PASSWORD TO CLIPBOARD BUTTON =====
@@ -499,29 +510,4 @@ public class GUI {
                 return "Action"; // return value unused but must not be null
             }
         }
-
-
-    // ===== SALT HANDLING =====
-    // A salt is just random data added to a password before key derivation --- prevents Rainbow Table attacks
-    private byte[] getOrCreateSalt(Connection conn) throws Exception {
-        Statement stmt = conn.createStatement();
-
-        stmt.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value BLOB)");
-
-        PreparedStatement ps = conn.prepareStatement("SELECT value FROM meta WHERE key='salt'");
-        ResultSet rs = ps.executeQuery();
-
-        if (rs.next()) {
-            return rs.getBytes(1);
-        }
-
-        byte[] salt = new byte[16];
-        new java.security.SecureRandom().nextBytes(salt);
-
-        PreparedStatement insert = conn.prepareStatement("INSERT INTO meta(key,value) VALUES('salt',?)");
-        insert.setBytes(1, salt);
-        insert.executeUpdate();
-
-        return salt;
-    }
 }
