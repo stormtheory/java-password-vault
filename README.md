@@ -43,6 +43,7 @@ This project is intended as a **learning-focused implementation** of a password 
 * **Per-entry IV:** Each username and password uses a unique random IV
 * **On-demand Decryption:** Passwords are only decrypted when requested
 * **No Master Password Storage:** Master password is never saved
+* **Shutdown Hook:** Master password is cleared from memory before program is shutdown if NOT by `kill -9` or `Force End`
 
 ---
 
@@ -67,6 +68,7 @@ Tags, Usernames, and Passwords are stored as encrypted binary blobs.
 * Reveal password on demand
 * Delete entries with confirmation
 * Cross-platform support (Windows / Linux / macOS)
+* Shutdown Hook clears master password at graceful shutdown
 * Standalone compiled .jar executable
 
 ---
@@ -98,7 +100,7 @@ No external database or installer required.
 
 
 ---
-## 🖥️ Platforms Supported
+## 🖥️ Platforms Supported (Tested On)
 
     ✅ Debian 11+
     ✅ Ubuntu 20.04/22.04+
@@ -110,9 +112,12 @@ No external database or installer required.
 ## INSTALL:
 1) Download the latest released .deb package files off of github at https://github.com/stormtheory/java-password-vault/releases and install on your system.
 
-          Not supported yet, see manual install.
+          #### Windows/Linux/MacOS ####
+          # Download then execute like normal or use Linux command:
 
-3) Manual Install without Package Manager, run commands:
+          java -jar JavaPasswordVault-*.jar
+
+2) Manual Install without Package Manager, run commands:
 
     Download the zip file of the code, off of Github. This is found under the [<> Code] button on https://github.com/stormtheory/java-password-vault.
 

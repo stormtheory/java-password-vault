@@ -12,7 +12,11 @@ import java.lang.System;
 
 public class GUI {
     public boolean DEBUG = false; //true or false set to false before production
+    boolean isWindows = System.getProperty("os.name")
+                         .toLowerCase()
+                         .startsWith("windows");
     
+    private char[] masterPassword = new char[0];
     public boolean passwordGood = false;
     private ImageIcon dialogIcon = null;
     private Backend backend = new Backend();
@@ -119,9 +123,41 @@ public class GUI {
             }
         }
 
-        // ===== MASTER PASSWORD PROMPT =====
-        char[] masterPassword = new char[0];
+// ===== MASTER PASSWORD PROMPT =====
         
+        // ======= HOOK for SHUTDOWN =======
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("[Shutdown Hook] Running cleanup command...");
+ 
+            try {
+                
+                // SECURITY CRITICAL: Wipe master password from memory before JVM exits
+                // Prevents sensitive data staying in memory heap which mitigates memory dump attacks
+                Backend.wipeCharArray(masterPassword);
+
+                // Using ProcessBuilder is safer than Runtime.exec() — avoids shell injection
+                // Say goodnight to tell me we are gracefully shutdown.
+                ProcessBuilder pb = isWindows
+                    ? new ProcessBuilder("cmd.exe", "/c", "Goodbye...")
+                    : new ProcessBuilder("echo", "Goodbye...");
+                    // e.g. "bash", "-c", "your-script.sh"
+                    // e.g. "python3", "/opt/cleanup.py"
+ 
+                // Inherit stdout/stderr so output is visible in the terminal
+                pb.inheritIO();
+ 
+                Process process = pb.start();
+                int exitCode = process.waitFor();
+ 
+                System.out.println(exitCode);
+ 
+            } catch (Exception e) {
+                // Log but don't rethrow — throwing inside a hook is silently ignored
+                System.err.println("[Shutdown Hook] Failed to run command: " + e.getMessage());
+            }
+        }, "shutdown-hook-thread"));
+
+
         if (isNew) {
             while (true) {
                 // ===== CREATE PASSWORD =====
@@ -144,30 +180,29 @@ public class GUI {
 
                 if (ok != JOptionPane.OK_OPTION) System.exit(0);
 
-                char[] p1 = pf1.getPassword();
+                masterPassword = pf1.getPassword();
                 char[] p2 = pf2.getPassword();
 
-                if (!java.util.Arrays.equals(p1, p2)) {
+                if (!java.util.Arrays.equals(masterPassword, p2)) {
                     passwordGood = false;
                     JOptionPane.showMessageDialog(null, "Passwords do not match!");
-                    Backend.wipeCharArray(p1);
+                    Backend.wipeCharArray(masterPassword);
                     Backend.wipeCharArray(p2);
-                } else if (p1.length == 0) {
+                } else if (masterPassword.length == 0) {
                     // Password cannot be empty
                     JOptionPane.showMessageDialog(null, "Password cannot be empty!", 
                     "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
-                    Backend.wipeCharArray(p1);
+                    Backend.wipeCharArray(masterPassword);
                     Backend.wipeCharArray(p2);
-                 } else if (p1.length < 8) {
+                 } else if (masterPassword.length < 8) {
                     // Enforce minimum length
                      JOptionPane.showMessageDialog(null, "Password must be at least 8 characters!", 
                       "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
-                      Backend.wipeCharArray(p1);
+                      Backend.wipeCharArray(masterPassword);
                       Backend.wipeCharArray(p2);
                 } else {
                     // All checks passed
                     passwordGood = true;
-                    masterPassword = p1;
                     break;
                 }
                 Backend.wipeCharArray(p2);
