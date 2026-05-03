@@ -132,6 +132,14 @@ No external database or installer required.
 
 # Using Netbeans:
 ### What a NetBeans user needs to do
+    YourProject/
+    ├── src/
+    │   └── icons/          ← put your PNGs HERE
+    │       ├── icon_16.png
+    │       ├── icon_32.png
+    │       └── icon_256.png
+    └── build/
+
    1. `File` >> `New Project`
       `Java with ANT` >> `Java Appilcation` >> `NEXT` >>
       Project Name: `JavaVault` (or whatever) >> `Select your locations` >> `Deselect Create Main Class` >> Click `Finish`

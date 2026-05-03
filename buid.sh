@@ -65,32 +65,34 @@ TAR_UP() {
 }
 
 BUILD() {
-        echo 'javac -cp ".:sqlite-jdbc-3.53.0.0.jar" -d go *.java'
-        javac -cp ".:sqlite-jdbc-3.53.0.0.jar" -d go *.java
+        rm -f ./bin/*
+        echo 'javac -cp ".:sqlite-jdbc-3.53.0.0.jar" -d bin *.java'
+        javac -cp ".:sqlite-jdbc-3.53.0.0.jar" -d bin *.java
 }
 
 RUN(){
-        echo 'java --enable-native-access=ALL-UNNAMED -Dorg.sqlite.tmpdir=. -cp \"go:sqlite-jdbc-3.53.0.0.jar\" GUI'
-        java --enable-native-access=ALL-UNNAMED -Dorg.sqlite.tmpdir=. -cp "go:sqlite-jdbc-3.53.0.0.jar" GUI
+        echo 'java --enable-native-access=ALL-UNNAMED -Dorg.sqlite.tmpdir=. -cp \"bin:sqlite-jdbc-3.53.0.0.jar\" GUI'
+        java --enable-native-access=ALL-UNNAMED -Dorg.sqlite.tmpdir=. -cp "bin:sqlite-jdbc-3.53.0.0.jar" GUI
 }
 
 HELP=true
 # 🔍 Parse options
-while getopts ":idrbh" opt; do
+while getopts ":idbrh" opt; do
   case ${opt} in
     d)
+        TAR_UP=true
         DOWNLOADS=true
         HELP=false
         ;;
     i)
-        BUILD
+        BUILD=true
         HELP=false
         ;;
     b)
-        BUILD
+        BUILD=true
         HELP=false
         ;;
-    r)  RUN
+    r)  RUN=true
         HELP=false
         ;;
     h)
@@ -109,6 +111,21 @@ while getopts ":idrbh" opt; do
       ;;
   esac
 done
+
+
+if [ "$BUILD" == true ];then
+    BUILD
+fi
+
+if [ "$TAR_UP" == true ];then
+    TAR_UP
+fi
+
+if [ "$RUN" == true ];then
+    RUN
+fi
+
+
 if [ "$HELP" == true ];then
         show_help
         exit 1
