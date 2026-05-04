@@ -2,10 +2,8 @@ import javax.crypto.*;
 import javax.crypto.spec.*;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
-//import java.security.spec.KeySpec;
 import java.sql.*;
 import java.util.*;
-//import de.mkammerer.argon2.Argon2;
 import de.mkammerer.argon2.Argon2Advanced;
 import de.mkammerer.argon2.Argon2Factory;
 import de.mkammerer.argon2.Argon2Factory.Argon2Types;
@@ -15,14 +13,13 @@ public class Backend {
 
     // ===== CONFIG =====
     // Strength factors
-    private static final int ARGON2_ITERATIONS  = 2;
-    private static final int ARGON2_MEMORY_KB   = 19456; // 19 MB — OWASP 2023 minimum
-    private static final int ARGON2_PARALLELISM = 1;
     private static final int GCM_TAG_LENGTH = 128;
     private static final int IV_LENGTH = 12;
     private static final int SALT_SIZE = 32;
+    private static final int AES_KEY_BYTES = 32; // 32 = AES256
 
     private SecretKey aesKey;
+    protected String sensitivityLevel = "MEDIUM"; //DEFAULT
 
     // ===== DATA CLASS =====
     // If you build it they will come...
@@ -45,22 +42,7 @@ public class Backend {
             System.out.println("[INIT] AESkey initialized: " + (this.aesKey != null) + " | algorithm: " + this.aesKey.getAlgorithm() + " | size: " + (this.aesKey.getEncoded().length * 8) + " bits");}
         wipeCharArray(masterPassword);
         if (DEBUG) {System.out.println("[INIT] PASS: Wiped");}
-        
     }
-
-    // ===== KEY DERIVATION ===== One of the most important parts!!!! 
-    // Key derivation turns a human readable password into a strong cryptographic key
-    // PBKDF2 is still appropriate here — we need raw bytes for AES, not a hash string
-//    private static final int KEY_BYTES          = 32;    // 256 bits for AES-256
-//    private static final int KEY_SIZE = 256;
-//    private static final int PBKDF2_ITERATIONS = 600_000; // OWASP 2023 recommends 600,000
-//    private SecretKey deriveKey(char[] password, byte[] salt) throws Exception {
-//        SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
-//        KeySpec spec = new PBEKeySpec(password, salt, PBKDF2_ITERATIONS, KEY_SIZE);
-//        SecretKey tmp = factory.generateSecret(spec);
-//        return new SecretKeySpec(tmp.getEncoded(), "AES");
-//    }
-
 
     // ===== LOAD ARGON2 PARAMETERS FROM DB =====
         // Always derive the key using the parameters the vault was CREATED with
@@ -70,8 +52,16 @@ public class Backend {
                 "SELECT key, Tvalue FROM meta WHERE key IN ('argon2_iterations','argon2_memory_kb','argon2_parallelism')"
             );
             ResultSet rs = ps.executeQuery();
+        
+            Argon2Profile.Profile profile = switch (sensitivityLevel) {
+                case "MINIMUM"  -> Argon2Profile.MINIMUM;
+                case "MEDIUM"   -> Argon2Profile.MEDIUM;
+                case "HIGH"     -> Argon2Profile.HIGH;
+                case "VAULT"    -> Argon2Profile.PARANOID;
+                default -> throw new IllegalArgumentException("Unknown security profile: " + sensitivityLevel);
+            };
 
-            int iterations = ARGON2_ITERATIONS, memoryKb = ARGON2_MEMORY_KB, parallelism = ARGON2_PARALLELISM; // fallback defaults
+            int iterations = profile.iterations() , memoryKb = profile.memoryKb(), parallelism = profile.parallelism(); // fallback defaults
 
             while (rs.next()) {
                 switch (rs.getString("key")) {
@@ -259,6 +249,15 @@ public class Backend {
     protected void BuildDatabase(Connection conn, String version, String type) throws Exception {
         Statement stmt = conn.createStatement();
 
+    // --- Or select dynamically based on context (e.g. user tier, data sensitivity) ---
+    Argon2Profile.Profile profile = switch (sensitivityLevel) {
+        case "MINIMUM"  -> Argon2Profile.MINIMUM;
+        case "MEDIUM"   -> Argon2Profile.MEDIUM;
+        case "HIGH"     -> Argon2Profile.HIGH;
+        case "VAULT"    -> Argon2Profile.PARANOID;
+        default -> throw new IllegalArgumentException("Unknown security profile: " + sensitivityLevel);
+    };
+    
         // Vault table
         stmt.execute("""
             CREATE TABLE vault (
@@ -293,15 +292,19 @@ public class Backend {
                 insert.addBatch();
 
                 insert.setString(1, "argon2_iterations");
-                insert.setInt(2, ARGON2_ITERATIONS);
+                insert.setInt(2, profile.iterations());
                 insert.addBatch();
 
                 insert.setString(1, "argon2_memory_kb");
-                insert.setInt(2, ARGON2_MEMORY_KB);
+                insert.setInt(2, profile.memoryKb());
                 insert.addBatch();
 
                 insert.setString(1, "argon2_parallelism");
-                insert.setInt(2, ARGON2_PARALLELISM);
+                insert.setInt(2, profile.parallelism());
+                insert.addBatch();
+
+                insert.setString(1, "argon2_hash_length");
+                insert.setInt(2, profile.hashLength());
                 insert.addBatch();
 
                 // Execute all inserts in one round-trip to the database

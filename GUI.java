@@ -8,11 +8,19 @@ import java.util.List;
 import java.util.ArrayList;
 
 public class GUI {
-    public boolean DEBUG = false; //true or false set to false before production
-    boolean isWindows = System.getProperty("os.name")
-                         .toLowerCase()
-                         .startsWith("windows");
     
+// ===== CONFIG =====
+    private int PASSWORD_LENGTH = 8;
+    private String DATABASE_VER = "0";
+    private String DATABASE_TYPE = "s";
+    protected String sensitivityLevel = "MEDIUM"; //DEFAULT
+
+    private int CLIPBOARD_CLEAR_SEC = 60_000;
+
+// ===== DEFAULT FIELDS ======
+    public boolean DEBUG = false; //true or false, set to false before production
+    
+    public boolean isWindows = System.getProperty("os.name").toLowerCase().startsWith("windows");
     private char[] masterPassword = new char[0];
     public boolean passwordGood = false;
     private ImageIcon dialogIcon = null;
@@ -21,7 +29,8 @@ public class GUI {
     private JTable table;
     private DefaultTableModel model;
     private List<Backend.Credential> credentials = new ArrayList<>();
-
+    
+// ======= MAIN ====================
     public static void main(String[] args) throws Exception {
         if (System.getProperty("nativeAccessEnabled") == null) {
         String java = ProcessHandle.current().info().command().orElse("java");
@@ -189,7 +198,7 @@ public class GUI {
                     "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
                     Backend.wipeCharArray(masterPassword);
                     Backend.wipeCharArray(p2);
-                 } else if (masterPassword.length < 8) {
+                 } else if (masterPassword.length < PASSWORD_LENGTH) {
                     // Enforce minimum length
                      JOptionPane.showMessageDialog(null, "Password must be at least 8 characters!", 
                       "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
@@ -234,7 +243,7 @@ public class GUI {
                 conn = DriverManager.getConnection("jdbc:sqlite:" + vaultPath);
 
                 if (isNew) {
-                    backend.BuildDatabase(conn, "0", "s");
+                    backend.BuildDatabase(conn, DATABASE_VER, DATABASE_TYPE);
                 }
 
                 // ===== GET SALT ===== #### Pulled from vault.db radom to each vault
@@ -360,7 +369,7 @@ public class GUI {
 
                 // Auto-clears clipboard after 60s
                 // THIS WAS PRETTY COOL TO SEE HOW TO MAKE A THREAD IN JAVA!
-                javax.swing.Timer wipeclip = new javax.swing.Timer(60_000, ev -> {
+                javax.swing.Timer wipeclip = new javax.swing.Timer(CLIPBOARD_CLEAR_SEC, ev -> {
                     java.awt.Toolkit.getDefaultToolkit()
                         .getSystemClipboard()
                         .setContents(new java.awt.datatransfer.StringSelection(""), null);
