@@ -11,7 +11,14 @@ cd "$(dirname "$0")"
 ##
 ####################################################################
 
+#https://central.sonatype.com/artifact/de.mkammerer/argon2-jvm/versions
+# argon2-jvm:jar:2.12
+#https://github.com/xerial/sqlite-jdbc/releases
 
+ARGON2_LIB='argon2-jvm-2.12.jar'
+SQLITE_LIB='sqlite-jdbc-3.53.0.0.jar'
+
+JAR_FILENAME=JavaPasswordVault.jar
 
 # No running as root!
 ID=$(id -u)
@@ -67,7 +74,7 @@ TAR_UP() {
 
 JAR(){
     # ===== Clean old build =====
-    rm -f bin/* JavaPasswordVault.jar
+    rm -f bin/* $JAR_FILENAME
     rm -rf fatjar 
 
     # ===== Compile =====
@@ -76,27 +83,27 @@ JAR(){
     # ===== Build fat jar =====
     mkdir -p fatjar
     cp -r bin/* fatjar/
-    cd fatjar && jar xf ../sqlite-jdbc-3.53.0.0.jar && cd ..
+    cd fatjar && jar xf ../lib/$SQLITE_LIB && jar xf ../lib/$ARGON2_LIB && cd ..
 
     # ===== Write manifest =====
     mkdir -p fatjar/META-INF
     printf 'Manifest-Version: 1.0\nMain-Class: GUI\n\n' > fatjar/META-INF/MANIFEST.MF
 
     # ===== Package =====
-    cd fatjar && jar cfm ../JavaPasswordVault.jar META-INF/MANIFEST.MF . && cd ..
+    cd fatjar && jar cfm ../$JAR_FILENAME META-INF/MANIFEST.MF . && cd ..
 
-    echo "#### Done #### run with: java -jar JavaPasswordVault.jar"
+    echo "#### Done #### run with: java -jar $JAR_FILENAME"
 }
 
 BUILD() {
         rm -f ./bin/*
-        echo 'javac -cp ".:sqlite-jdbc-3.53.0.0.jar" -d bin *.java'
-        javac -cp ".:sqlite-jdbc-3.53.0.0.jar" -d bin *.java
+        echo "javac -cp \".:lib/$SQLITE_LIB\" -cp \".:lib/$ARGON2_LIB\" -d bin *.java"
+        javac -cp ".:lib/$SQLITE_LIB" -cp ".:lib/$ARGON2_LIB" -d bin *.java
 }
 
 RUN(){
-        echo 'java --enable-native-access=ALL-UNNAMED -Dorg.sqlite.tmpdir=. -cp \"bin:sqlite-jdbc-3.53.0.0.jar\" GUI'
-        java --enable-native-access=ALL-UNNAMED -Dorg.sqlite.tmpdir=. -cp "bin:sqlite-jdbc-3.53.0.0.jar" GUI
+        echo "java --enable-native-access=ALL-UNNAMED -Dorg.sqlite.tmpdir=. -cp \"bin:$SQLITE_LIB\" -cp \"bin:$ARGON2_LIB\" GUI"
+        java --enable-native-access=ALL-UNNAMED -Dorg.sqlite.tmpdir=. -cp "bin:$SQLITE_LIB" -cp "bin:$ARGON2_LIB" GUI
 }
 
 HELP=true

@@ -75,6 +75,7 @@ Tags, Usernames, and Passwords are stored as encrypted binary blobs.
 * SQLite JDBC driver:
 
   * `sqlite-jdbc-3.53.0.0.jar`
+  * `argon2-jvm-2.12.jar`
 
 No external database or installer required.
 
@@ -129,25 +130,30 @@ No external database or installer required.
 
           java -jar JavaPasswordVault-*.jar
 
+
 2) Manual Install without Package Manager, run commands:
 
     Download the zip file of the code, off of Github. This is found under the [<> Code] button on https://github.com/stormtheory/java-password-vault.
 
     Extract directory from the zip file. Run the following commands within the directory.
 
-        /In Folder Requirements
+        #/In Folder Requirements
           Backend.java
           GUI.java
-          sqlite-jdbc-3.53.0.0.jar
+          IdleTimeoutManager.java
+          lib/sqlite-jdbc-3.53.0.0.jar
+          lib/argon2-jvm-2.12.jar
+          bin/
+          icons/
 
 
         # Linux Install or edit code:
             cd java-password-vault
-                javac -cp ".:sqlite-jdbc-3.53.0.0.jar" -d go *.java
+                ./build.sh -br  # Build and Run
 
                 # or
 
-                ./build.sh -br  # Build and Run
+                ./build.sh -r  # Run
             
 
         # Windows Install or edit code:
@@ -160,7 +166,7 @@ No external database or installer required.
 
         # Linux:
             cd java-password-vault
-            java --enable-native-access=ALL-UNNAMED -Dorg.sqlite.tmpdir=. -cp "go:sqlite-jdbc-3.53.0.0.jar" GUI
+            ./build.sh -r
 
         # Windows:
             Within the folder run command:
@@ -178,6 +184,7 @@ No external database or installer required.
     │   |    └── icon_256.png
     |   └── GUI.java
     |   └── Backend.java
+    |   └── IdleTimeoutManager.java
     └── build/
 
    1. `File` >> `New Project` >> 
@@ -187,10 +194,12 @@ No external database or installer required.
    2. Drag and drop the files below into your Source Packages under \<default package>:
       `Backend.java`
       `GUI.java`
+      `IdleTimeoutManager.java`
 
-   3. Add the SQLite driver
+   3. Add the needed Libraries
       In NetBeans:
          Right-click `Libraries` >> Click `Add JAR/Folder` >> Select:`sqlite-jdbc-3.53.0.0.jar`
+         Right-click `Libraries` >> Click `Add JAR/Folder` >> Select:`argon2-jvm-2.12.jar`
 
    4. May need to add:
       Add JVM option in NetBeans
