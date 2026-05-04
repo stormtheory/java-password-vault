@@ -8,11 +8,19 @@ import java.util.List;
 import java.util.ArrayList;
 
 public class GUI {
-    public boolean DEBUG = false; //true or false set to false before production
-    boolean isWindows = System.getProperty("os.name")
-                         .toLowerCase()
-                         .startsWith("windows");
     
+// ===== CONFIG =====
+    private int PASSWORD_LENGTH = 8;
+    private String DATABASE_VER = "0";
+    private String DATABASE_TYPE = "s";
+    protected String VaultLevel = "";
+
+    private int CLIPBOARD_CLEAR_SEC = 60_000;
+
+// ===== DEFAULT FIELDS ======
+    public boolean DEBUG = false; //true or false, set to false before production
+    
+    public boolean isWindows = System.getProperty("os.name").toLowerCase().startsWith("windows");
     private char[] masterPassword = new char[0];
     public boolean passwordGood = false;
     private ImageIcon dialogIcon = null;
@@ -21,7 +29,8 @@ public class GUI {
     private JTable table;
     private DefaultTableModel model;
     private List<Backend.Credential> credentials = new ArrayList<>();
-
+    
+// ======= MAIN ====================
     public static void main(String[] args) throws Exception {
         if (System.getProperty("nativeAccessEnabled") == null) {
         String java = ProcessHandle.current().info().command().orElse("java");
@@ -155,53 +164,71 @@ public class GUI {
 
         if (isNew) {
             while (true) {
-                // ===== CREATE PASSWORD =====
-                // if no vault.db then prompt for a password and make a vault
-                JPasswordField pf1 = new JPasswordField();
-                JPasswordField pf2 = new JPasswordField();
+            // ===== CREATE PASSWORD =====
+            // if no vault.db then prompt for a password and make a vault
+            JPasswordField pf1 = new JPasswordField();
+            JPasswordField pf2 = new JPasswordField();
 
-                Object[] msg = {
-                        "Create Master Password:", pf1,
-                        "Confirm Password:", pf2
-                };
+            // Profile selector — lets user choose their threat model at vault creation time
+            // Order matches Argon2Profile severity: lowest cost → highest cost
+            JComboBox<String> profileSelector = new JComboBox<>(new String[]{
+                "Minimum  - Low risk, high throughput (OWASP 2023)",
+                "Balanced - Most applications (RFC 9106)",
+                "High     - Sensitive credentials (RFC 9106)",
+                "Paranoid - Vault/master-key grade"
+            });
+            // Default to BALANCED — sensible for most users without explanation
+            profileSelector.setSelectedIndex(2);
 
-                int ok = JOptionPane.showConfirmDialog(
-                        null,
-                        msg,
-                        "Create Master Password",
-                        JOptionPane.OK_CANCEL_OPTION,
-                        JOptionPane.PLAIN_MESSAGE
-                );
+            Object[] msg = {
+                "Create Master Password:", pf1,
+                "Confirm Password:", pf2,
+                "Security Profile:", profileSelector  // Wire in profile choice
+            };
+            int ok = JOptionPane.showConfirmDialog(
+                null,
+                msg,
+                "Create Master Password",
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE
+            );
 
-                if (ok != JOptionPane.OK_OPTION) System.exit(0);
+            if (ok != JOptionPane.OK_OPTION) System.exit(0);
 
-                masterPassword = pf1.getPassword();
-                char[] p2 = pf2.getPassword();
+            masterPassword = pf1.getPassword();
+            char[] p2 = pf2.getPassword();
 
-                if (!java.util.Arrays.equals(masterPassword, p2)) {
-                    passwordGood = false;
-                    JOptionPane.showMessageDialog(null, "Passwords do not match!");
-                    Backend.wipeCharArray(masterPassword);
-                    Backend.wipeCharArray(p2);
-                } else if (masterPassword.length == 0) {
-                    // Password cannot be empty
-                    JOptionPane.showMessageDialog(null, "Password cannot be empty!", 
-                    "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
-                    Backend.wipeCharArray(masterPassword);
-                    Backend.wipeCharArray(p2);
-                 } else if (masterPassword.length < 8) {
-                    // Enforce minimum length
-                     JOptionPane.showMessageDialog(null, "Password must be at least 8 characters!", 
-                      "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
-                      Backend.wipeCharArray(masterPassword);
-                      Backend.wipeCharArray(p2);
-                } else {
-                    // All checks passed
-                    passwordGood = true;
-                    break;
-                }
+            if (!java.util.Arrays.equals(masterPassword, p2)) {
+                passwordGood = false;
+                JOptionPane.showMessageDialog(null, "Passwords do not match!");
+                Backend.wipeCharArray(masterPassword);
                 Backend.wipeCharArray(p2);
+            } else if (masterPassword.length == 0) {
+                // Password cannot be empty
+                JOptionPane.showMessageDialog(null, "Password cannot be empty!",
+                    "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
+                Backend.wipeCharArray(masterPassword);
+                Backend.wipeCharArray(p2);
+            } else if (masterPassword.length < PASSWORD_LENGTH) {
+                // Enforce minimum length
+                JOptionPane.showMessageDialog(null, "Password must be at least " + PASSWORD_LENGTH + " characters!",
+                    "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
+                Backend.wipeCharArray(masterPassword);
+                Backend.wipeCharArray(p2);
+            } else {
+                // All checks passed — map selected index to Argon2Profile
+                VaultLevel = switch (profileSelector.getSelectedIndex()) {
+                    case 0  -> "MINIMUM";
+                    case 1  -> "BALANCED";
+                    case 3  -> "PARANOID";
+                    default -> "HIGH";
+                };
+                //sensitivityLevel = new String(selectedProfile);
+                passwordGood = true;
+                break;
             }
+            Backend.wipeCharArray(p2);
+        }
 
         } else {
             // ===== AT STARTUP - ENTER PASSWORD =====
@@ -234,7 +261,7 @@ public class GUI {
                 conn = DriverManager.getConnection("jdbc:sqlite:" + vaultPath);
 
                 if (isNew) {
-                    backend.BuildDatabase(conn, "0", "s");
+                    backend.BuildDatabase(conn, DATABASE_VER, DATABASE_TYPE, VaultLevel);
                 }
 
                 // ===== GET SALT ===== #### Pulled from vault.db radom to each vault
@@ -360,7 +387,7 @@ public class GUI {
 
                 // Auto-clears clipboard after 60s
                 // THIS WAS PRETTY COOL TO SEE HOW TO MAKE A THREAD IN JAVA!
-                javax.swing.Timer wipeclip = new javax.swing.Timer(60_000, ev -> {
+                javax.swing.Timer wipeclip = new javax.swing.Timer(CLIPBOARD_CLEAR_SEC, ev -> {
                     java.awt.Toolkit.getDefaultToolkit()
                         .getSystemClipboard()
                         .setContents(new java.awt.datatransfer.StringSelection(""), null);
