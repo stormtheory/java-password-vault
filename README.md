@@ -38,7 +38,8 @@ This project is intended as a **learning-focused implementation** of a password 
 ## 🖥️ Features and Design
 
 * **Encryption:** AES-256-GCM (confidentiality + integrity) (Post Quantum Resistant)
-* **Key Derivation:** PBKDF2 with random salt (stored in database)
+* **Key Derivation:** Argon2id with random salt (stored in database) 
+* **Argon2id:** hybrid variant, resistant to both GPU and side-channel attacks (parameters stored in database)
 * **Password Handling:** Stored in `char[]`, wiped from memory after use
 * **Per-entry IV:** Each username and password uses a unique random IV
 
@@ -83,7 +84,6 @@ No external database or installer required.
 
 ## ⚠️ Limitations
 
-* Uses PBKDF2 (Argon2 not yet implemented)
 * Memory may not be fully cleared, always a risk, but data is always encrypted on disk. (Work around: turn off swap space)(Reboot/Shutdown of your machine clears the memory)
 * Will not save you from keyloggers or other kinds of malware but will keep the data safe if the vault is closed.
 
@@ -92,7 +92,6 @@ No external database or installer required.
 ## 🚀 Future Improvements
 
 **[ Major Upgrades ]**
-* Argon2 key derivation (More modern but not a rush)
 * Multi-User account option (Shared encryption key) (Good for legacy accounts or small business)
 
 **[ New Features ]**
@@ -230,4 +229,28 @@ No external database or installer required.
 
 ## Database Versions
 **[ 0 ]** [Current]
-* Beta: |PBKDF2|AES256-GCM|SALT| Testing of new database ideas and expanding, expect to have to rebuild if something changes ina newer version, so keep your older versions until tested.
+* Beta: |Argon2id|AES256-GCM|SALT| Testing of new database ideas and expanding, expect to have to rebuild if something changes ina newer version, so keep your older versions until tested.
+
+
+## Decryption
+
+**[ Single User ]**
+User types master password
+         ↓
+PBKDF2/Argon2 + salt (stored in DB) → AES key (lives only in RAM)
+         ↓
+Session ends → key gone forever
+
+
+**[ Multi User ]**
+User 1 password → Argon2id → verify login
+                           ↓
+                    PBKDF2/Argon2 → User 1's personal key → decrypts their copy of the shared vault key
+                                                                    ↓
+                                                          Shared AES key (in DB, encrypted)
+                                                                    ↓
+                                                              Vault data
+
+Each user has their own salt + Argon2 hash + wrapped copy of the shared key
+Compromising one user's password only exposes their wrapped key, not others
+Adding/removing a user just means re-wrapping the shared key, not re-encrypting the whole vault

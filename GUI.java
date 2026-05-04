@@ -234,7 +234,7 @@ public class GUI {
                 conn = DriverManager.getConnection("jdbc:sqlite:" + vaultPath);
 
                 if (isNew) {
-                    backend.initializeDatabase(conn, "0", "s");
+                    backend.BuildDatabase(conn, "0", "s");
                 }
 
                 // ===== GET SALT ===== #### Pulled from vault.db radom to each vault
@@ -243,7 +243,7 @@ public class GUI {
                 
                 // ===== INIT BACKEND =====
                 // A salt is just random data added to a password before key derivation --- prevents Rainbow Table attacks
-                backend.initialize(masterPassword, salt);
+                backend.GetFiredUp(masterPassword, salt, conn);
 
                 // ===== LOAD DATA =====
                 // Loads all data into an ArraryList
