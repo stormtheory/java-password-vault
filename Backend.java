@@ -2,19 +2,25 @@ import javax.crypto.*;
 import javax.crypto.spec.*;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
-import java.security.spec.KeySpec;
+//import java.security.spec.KeySpec;
 import java.sql.*;
 import java.util.*;
+//import de.mkammerer.argon2.Argon2;
+import de.mkammerer.argon2.Argon2Advanced;
+import de.mkammerer.argon2.Argon2Factory;
+import de.mkammerer.argon2.Argon2Factory.Argon2Types;
 
 public class Backend {
     public boolean DEBUG = false; //true or false set to false before production
 
     // ===== CONFIG =====
     // Strength factors
-    private static final int KEY_SIZE = 256;
-    private static final int ITERATIONS = 65536;
+    private static final int ARGON2_ITERATIONS  = 2;
+    private static final int ARGON2_MEMORY_KB   = 19456; // 19 MB — OWASP 2023 minimum
+    private static final int ARGON2_PARALLELISM = 1;
     private static final int GCM_TAG_LENGTH = 128;
     private static final int IV_LENGTH = 12;
+    private static final int SALT_SIZE = 32;
 
     private SecretKey aesKey;
 
@@ -30,8 +36,9 @@ public class Backend {
 
     // ===== INIT (derive key once per session) ===== 
     // A salt is just random data added to a password before key derivation --- prevents Rainbow Table attacks
-    protected void initialize(char[] masterPassword, byte[] salt) throws Exception {
-        this.aesKey = deriveKey(masterPassword, salt);
+    protected void GetFiredUp(char[] masterPassword, byte[] salt, Connection conn) throws Exception {
+        int[] params = loadArgon2Params(conn);
+        this.aesKey = deriveKey(masterPassword, salt, params);
         if (DEBUG) {
             System.out.println("[INIT] PASS: " + masterPassword.length * 8 + " | Salt: " + salt.length * 8);
             System.out.println("[INIT] AESkey: " + this.aesKey);
@@ -43,12 +50,59 @@ public class Backend {
 
     // ===== KEY DERIVATION ===== One of the most important parts!!!! 
     // Key derivation turns a human readable password into a strong cryptographic key
-    private SecretKey deriveKey(char[] password, byte[] salt) throws Exception {
-        SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
-        KeySpec spec = new PBEKeySpec(password, salt, ITERATIONS, KEY_SIZE);
-        SecretKey tmp = factory.generateSecret(spec);
-        return new SecretKeySpec(tmp.getEncoded(), "AES");
-    }
+    // PBKDF2 is still appropriate here — we need raw bytes for AES, not a hash string
+//    private static final int KEY_BYTES          = 32;    // 256 bits for AES-256
+//    private static final int KEY_SIZE = 256;
+//    private static final int PBKDF2_ITERATIONS = 600_000; // OWASP 2023 recommends 600,000
+//    private SecretKey deriveKey(char[] password, byte[] salt) throws Exception {
+//        SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+//        KeySpec spec = new PBEKeySpec(password, salt, PBKDF2_ITERATIONS, KEY_SIZE);
+//        SecretKey tmp = factory.generateSecret(spec);
+//        return new SecretKeySpec(tmp.getEncoded(), "AES");
+//    }
+
+
+    // ===== LOAD ARGON2 PARAMETERS FROM DB =====
+        // Always derive the key using the parameters the vault was CREATED with
+        // Never use hardcoded constants at derive-time - who knows when the parameters may have been upgraded
+        private int[] loadArgon2Params(Connection conn) throws Exception {
+            PreparedStatement ps = conn.prepareStatement(
+                "SELECT key, Tvalue FROM meta WHERE key IN ('argon2_iterations','argon2_memory_kb','argon2_parallelism')"
+            );
+            ResultSet rs = ps.executeQuery();
+
+            int iterations = ARGON2_ITERATIONS, memoryKb = ARGON2_MEMORY_KB, parallelism = ARGON2_PARALLELISM; // fallback defaults
+
+            while (rs.next()) {
+                switch (rs.getString("key")) {
+                    case "argon2_iterations"  -> iterations  = Integer.parseInt(rs.getString("Tvalue"));
+                    case "argon2_memory_kb"   -> memoryKb    = Integer.parseInt(rs.getString("Tvalue"));
+                    case "argon2_parallelism" -> parallelism = Integer.parseInt(rs.getString("Tvalue"));
+                }
+            }
+            return new int[]{iterations, memoryKb, parallelism};
+        }
+
+    // ===== KEY DERIVATION ===== Argon2id replaced PBKDF2 entirely ===== One of the most important parts!!!! 
+        // Key derivation turns a human readable password into a strong cryptographic key
+        // Argon2id is memory-hard, makes brute force expensive even with GPUs
+        // Argon2id hybrid variant, resistant to both GPU and side-channel attacks
+        // Output raw bytes are used directly as the AES key — no PBKDF2 involvement anymore!
+        private SecretKey deriveKey(char[] password, byte[] salt, int[] params) throws Exception {            
+            Argon2Advanced argon2 = (Argon2Advanced) Argon2Factory.createAdvanced(Argon2Types.ARGON2id);
+
+            // rawHash() returns raw bytes — exactly what AES needs as a key
+            byte[] keyBytes = argon2.rawHash(params[0], params[1], params[2], password, salt);
+
+            // Wrap raw bytes as AES key
+            SecretKey key = new SecretKeySpec(keyBytes, "AES");
+
+            // Wipe raw key bytes from memory immediately after wrapping
+            wipeByteArray(keyBytes);
+
+            return key;
+        }
+
 
     // ===== ENCRYPT ===== using AES256-GCM which AES is like a lock 🔒 and GCM is the tamper seal 🧾
     // 🔒 will encrypt whatever data you feed into it, then return the ecypted value
@@ -202,7 +256,7 @@ public class Backend {
     }
 
 
-    protected void initializeDatabase(Connection conn, String version, String type) throws Exception {
+    protected void BuildDatabase(Connection conn, String version, String type) throws Exception {
         Statement stmt = conn.createStatement();
 
         // Vault table
@@ -238,6 +292,18 @@ public class Backend {
                 insert.setString(2, type);
                 insert.addBatch();
 
+                insert.setString(1, "argon2_iterations");
+                insert.setInt(2, ARGON2_ITERATIONS);
+                insert.addBatch();
+
+                insert.setString(1, "argon2_memory_kb");
+                insert.setInt(2, ARGON2_MEMORY_KB);
+                insert.addBatch();
+
+                insert.setString(1, "argon2_parallelism");
+                insert.setInt(2, ARGON2_PARALLELISM);
+                insert.addBatch();
+
                 // Execute all inserts in one round-trip to the database
                 insert.executeBatch();
             }
@@ -256,8 +322,8 @@ public class Backend {
             if (rs.next()) {
                 return rs.getBytes(1);
             }
-
-            byte[] salt = new byte[16];
+            
+            byte[] salt = new byte[SALT_SIZE];
             new java.security.SecureRandom().nextBytes(salt);
 
             try (PreparedStatement insert = conn.prepareStatement(
