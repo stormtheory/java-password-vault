@@ -5,6 +5,9 @@ import java.security.*;
 import java.security.spec.KeySpec;
 import java.sql.*;
 import java.util.*;
+import de.mkammerer.argon2.Argon2;
+import de.mkammerer.argon2.Argon2Factory;
+import de.mkammerer.argon2.Argon2Factory.Argon2Types;
 
 public class Backend {
     public boolean DEBUG = false; //true or false set to false before production
