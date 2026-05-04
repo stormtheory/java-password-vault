@@ -234,14 +234,14 @@ No external database or installer required.
 ## Encrytpion
 
   **[ Argon2 ]**
-  The unifying principle: the password/passphrase is just a human-memorable seed feed into Argon2id which does the work of turning low-entropy (less complex) human input into high-entropy (complex) key material that costs an attacker real money to brute-force. Not every hardware can handle the overhead or have a real need for alot more overhead. Use the below Strength Levels to find what might be right for you. As hardware gets to be more readily avaiable and with Post Quantum fears I would at least HIGH, but with experts saying we maybe 10 to 20 years away from Quantum Computing. 
+  The unifying principle: the password/passphrase is just a human-memorable seed that is fed into Argon2id which does the work of turning low-entropy (less complex) human input into high-entropy (complex) key material that costs an attacker real money to brute-force. Not every hardware can handle the overhead or have a real need for alot more overhead. Use the below Strength Levels to find what might be right for you. As hardware gets to be more readily avaiable and with Post Quantum fears I would at least HIGH, but with experts saying we maybe 10 to 20 years away from Quantum Computing. 
 
   **[ Argon2 - Strength Levels ]**
-  ++ Level → Only Recommended Uses ++
-  MINIMUM  → rate-limited online service, low-value data
-  BALANCED → typical application credentials
-  HIGH     → the RFC 9106 authors' explicit recommendation for sensitive credentials
-  PARANOID → the key is the secret (master key, recovery code, vault root) — you derive it rarely, so you can afford to make it brutal
+  * ++ Level → Only Recommended Uses ++
+  * MINIMUM  → rate-limited online service, low-value data
+  * BALANCED → typical application credentials
+  * HIGH     → the RFC 9106 authors' explicit recommendation for sensitive credentials
+  * PARANOID → the key is the secret (master key, recovery code, vault root) — you derive it rarely, so you can afford to make it brutal
 
 ## Decryption
 
