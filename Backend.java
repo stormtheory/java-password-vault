@@ -16,10 +16,9 @@ public class Backend {
     private static final int GCM_TAG_LENGTH = 128;
     private static final int IV_LENGTH = 12;
     private static final int SALT_SIZE = 32;
-    private static final int AES_KEY_BYTES = 32; // 32 = AES256
 
     private SecretKey aesKey;
-    protected String sensitivityLevel = "MEDIUM"; //DEFAULT
+    protected String sensitivityLevel = "BALANCED"; //DEFAULT
 
     // ===== DATA CLASS =====
     // If you build it they will come...
@@ -55,7 +54,7 @@ public class Backend {
         
             Argon2Profile.Profile profile = switch (sensitivityLevel) {
                 case "MINIMUM"  -> Argon2Profile.MINIMUM;
-                case "MEDIUM"   -> Argon2Profile.MEDIUM;
+                case "BALANCED"   -> Argon2Profile.BALANCED;
                 case "HIGH"     -> Argon2Profile.HIGH;
                 case "VAULT"    -> Argon2Profile.PARANOID;
                 default -> throw new IllegalArgumentException("Unknown security profile: " + sensitivityLevel);
@@ -84,9 +83,14 @@ public class Backend {
             // rawHash() returns raw bytes — exactly what AES needs as a key
             byte[] keyBytes = argon2.rawHash(params[0], params[1], params[2], password, salt);
 
+            // Check to make sure key is 32 bytes, which is what AES-256 uses for a key
+            if (keyBytes.length < 32) {
+                throw new SecurityException("Derived key too short for AES-256");
+            }
+
             // Wrap raw bytes as AES key
             SecretKey key = new SecretKeySpec(keyBytes, "AES");
-
+            
             // Wipe raw key bytes from memory immediately after wrapping
             wipeByteArray(keyBytes);
 
@@ -246,13 +250,13 @@ public class Backend {
     }
 
 
-    protected void BuildDatabase(Connection conn, String version, String type) throws Exception {
+    protected void BuildDatabase(Connection conn, String version, String type, String VaultLevel) throws Exception {
         Statement stmt = conn.createStatement();
 
     // --- Or select dynamically based on context (e.g. user tier, data sensitivity) ---
-    Argon2Profile.Profile profile = switch (sensitivityLevel) {
+    Argon2Profile.Profile profile = switch (VaultLevel) {
         case "MINIMUM"  -> Argon2Profile.MINIMUM;
-        case "MEDIUM"   -> Argon2Profile.MEDIUM;
+        case "BALANCED"   -> Argon2Profile.BALANCED;
         case "HIGH"     -> Argon2Profile.HIGH;
         case "VAULT"    -> Argon2Profile.PARANOID;
         default -> throw new IllegalArgumentException("Unknown security profile: " + sensitivityLevel);
@@ -301,10 +305,6 @@ public class Backend {
 
                 insert.setString(1, "argon2_parallelism");
                 insert.setInt(2, profile.parallelism());
-                insert.addBatch();
-
-                insert.setString(1, "argon2_hash_length");
-                insert.setInt(2, profile.hashLength());
                 insert.addBatch();
 
                 // Execute all inserts in one round-trip to the database
