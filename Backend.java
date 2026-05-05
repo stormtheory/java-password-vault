@@ -21,6 +21,7 @@ public class Backend {
     private SecretKey aesKey;
     protected String VaultLevel = "";
     protected String username = "single-user";
+    private byte[] user_salt;
 
     // ===== DATA CLASS =====
     // If you build it they will come...
@@ -51,11 +52,11 @@ public class Backend {
         // Never use hardcoded constants at derive-time - who knows when the parameters may have been upgraded
         private int[] loadArgon2Params(Connection conn, String username) throws Exception {
             PreparedStatement ps = conn.prepareStatement(
-                "SELECT argon2_iter, argon2_mem, argon2_para FROM users WHERE user_id = ?"
+                "SELECT argon2_iter, argon2_mem, argon2_para, salt FROM users WHERE user_id = ?"
             );
             ps.setString(1, username);
             ResultSet rs = ps.executeQuery();
-
+                user_salt = rs.getBytes("salt");
             return new int[]{rs.getInt("argon2_iter"), rs.getInt("argon2_mem"), rs.getInt("argon2_para")};
         }
 
@@ -68,7 +69,7 @@ public class Backend {
             Argon2Advanced argon2 = (Argon2Advanced) Argon2Factory.createAdvanced(Argon2Types.ARGON2id);
 
             // rawHash() returns raw bytes — exactly what AES needs as a key
-            byte[] keyBytes = argon2.rawHash(params[0], params[1], params[2], password, salt);
+            byte[] keyBytes = argon2.rawHash(params[0], params[1], params[2], password, user_salt);
 
             // Check to make sure key is 32 bytes, which is what AES-256 uses for a key
             if (keyBytes.length < 32) {
@@ -89,12 +90,12 @@ public class Backend {
     // 🔒 will encrypt whatever data you feed into it, then return the ecypted value
     // IV is a random value used during encryption so that the same input doesn’t produce the same hash output
     // Generated for us whenever new data cycle/set is saved
-    private byte[] encrypt(char[] password, byte[] iv) throws Exception {
+    private byte[] encrypt(char[] plaintext, byte[] iv) throws Exception {
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
         cipher.init(Cipher.ENCRYPT_MODE, aesKey, spec);
 
-        byte[] data = new String(password).getBytes(StandardCharsets.UTF_8);
+        byte[] data = new String(plaintext).getBytes(StandardCharsets.UTF_8);
         byte[] encrypted_data = cipher.doFinal(data);
 
         wipeByteArray(data);
@@ -102,16 +103,16 @@ public class Backend {
     }
 
     // ===== DECRYPT (ON DEMAND ONLY) =====
-    protected char[] decryptData(byte[] encrypted, byte[] iv) throws Exception {
+    protected char[] decryptData(byte[] encrypted_data, byte[] iv) throws Exception {
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
         cipher.init(Cipher.DECRYPT_MODE, aesKey, spec);
 
-        byte[] decrypted = cipher.doFinal(encrypted);
-        char[] result = new String(decrypted, StandardCharsets.UTF_8).toCharArray();
+        byte[] decrypted_charset = cipher.doFinal(encrypted_data);
+        char[] plaintext = new String(decrypted_charset, StandardCharsets.UTF_8).toCharArray();
 
-        wipeByteArray(decrypted);
-        return result;
+        wipeByteArray(decrypted_charset);
+        return plaintext;
     }
 
     protected String Pull_DB_Type(Connection conn) throws Exception {
@@ -265,9 +266,12 @@ public class Backend {
         stmt.execute("""
             CREATE TABLE vault (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type text,
                 tag BLOB,
                 username BLOB,
                 password BLOB,
+                notes BLOB,
+                data BLOB,
                 iv BLOB
             )
         """);
@@ -308,28 +312,36 @@ public class Backend {
                 // Database type identifier
                 insert.setString(1, "type");
                 insert.setString(2, type);
-                insert.addBatch(); 
+                insert.addBatch();
+
                 insert.executeBatch();
             }
 
+
+            byte[] user_salt = new byte[SALT_SIZE];
+            new java.security.SecureRandom().nextBytes(user_salt);
+
         if (type.equals("m")) {
             try (PreparedStatement insert = conn.prepareStatement(
-                "INSERT INTO users(user_id,role,wrapped_vk,salt,iv,argon2_iter,argon2_mem,argon2_para) VALUES(?,?,?,?,?,?,?,?)")) {
+                "INSERT INTO users(user_id,role,salt,argon2_iter,argon2_mem,argon2_para) VALUES(?,?,?,?,?,?)")) {
                 insert.setString(1, username);
-                insert.setInt(6, profile.iterations());
-                insert.setInt(7, profile.memoryKb());
-                insert.setInt(8, profile.parallelism());
+                insert.setString(2, "admin");
+                insert.setBytes(3, user_salt);
+                insert.setInt(4, profile.iterations());
+                insert.setInt(5, profile.memoryKb());
+                insert.setInt(6, profile.parallelism());
                 insert.addBatch();
 
                 insert.executeBatch();
             }
         } else if (type.equals("s")){
             try (PreparedStatement insert = conn.prepareStatement(
-                "INSERT INTO users(user_id,argon2_iter,argon2_mem,argon2_para) VALUES(?,?,?,?)")) {
+                "INSERT INTO users(user_id,salt,argon2_iter,argon2_mem,argon2_para) VALUES(?,?,?,?,?)")) {
                 insert.setString(1, username);
-                insert.setInt(2, profile.iterations());
-                insert.setInt(3, profile.memoryKb());
-                insert.setInt(4, profile.parallelism());
+                insert.setBytes(2, user_salt);
+                insert.setInt(3, profile.iterations());
+                insert.setInt(4, profile.memoryKb());
+                insert.setInt(5, profile.parallelism());
                 insert.addBatch();
 
                 insert.executeBatch();
@@ -337,45 +349,31 @@ public class Backend {
         }
     }
 
-        // ===== SALT HANDLING =====
+        // ===== VAULT SALT HANDLING =====
         // A salt is just random data added to a password before key derivation --- prevents Rainbow Table attacks
-        protected byte[] getOrCreateSalt(Connection conn) throws Exception {
+        protected byte[] getOrCreateVaultSalt(Connection conn) throws Exception {
             Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value BLOB)");
 
-            PreparedStatement ps = conn.prepareStatement("SELECT Bvalue FROM meta WHERE key='salt'");
+            PreparedStatement ps = conn.prepareStatement("SELECT Bvalue FROM meta WHERE key='vault_salt'");
             ResultSet rs = ps.executeQuery();
 
             if (rs.next()) {
                 return rs.getBytes(1);
             }
             
-            byte[] salt = new byte[SALT_SIZE];
-            new java.security.SecureRandom().nextBytes(salt);
+            byte[] vault_salt = new byte[SALT_SIZE];
+            new java.security.SecureRandom().nextBytes(vault_salt);
 
             try (PreparedStatement insert = conn.prepareStatement(
             "INSERT INTO meta(key,Bvalue) VALUES(?,?)")) {
-
                 // Salt — stored as bytes
-                insert.setString(1, "salt");
-                insert.setBytes(2, salt);
-                insert.addBatch(); // Queue rather than execute immediately
-
-                // // Future Expansion - Multiusers (Playing a game of which password goes with which user)
-                // insert.setString(1, "vault_user1");
-                // insert.setString(2, "s");
-                // insert.addBatch();
-
-                // // Future Expansion - Multiusers (Each user will encrypt the shared key with their own password)
-                // insert.setString(1, "shared_key1");
-                // insert.setString(2, "s");
-                // insert.addBatch();
-
-                // Execute all inserts in one round-trip to the database
+                insert.setString(1, "vault_salt");
+                insert.setBytes(2, vault_salt);
+                insert.addBatch(); 
                 insert.executeBatch();
             }
-
-            return salt;
+            return vault_salt;
         }
 }
