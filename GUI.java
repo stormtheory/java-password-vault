@@ -1,7 +1,6 @@
 import javax.swing.*;
 import javax.swing.table.*;
 import java.awt.*;
-//import java.awt.event.*;
 import java.io.File;
 import java.sql.*;
 import java.util.List;
@@ -12,14 +11,14 @@ public class GUI {
 // ===== CONFIG =====
     private int PASSWORD_LENGTH = 8;
     private String DATABASE_VER = "0";
-    private String DATABASE_TYPE = "s";
-    protected String VaultLevel = "";
-
     private int CLIPBOARD_CLEAR_SEC = 60_000;
 
 // ===== DEFAULT FIELDS ======
     public boolean DEBUG = false; //true or false, set to false before production
     
+    private String DATABASE_TYPE = "";
+    private String username = "single-user";
+    protected String VaultLevel = "";
     public boolean isWindows = System.getProperty("os.name").toLowerCase().startsWith("windows");
     private char[] masterPassword = new char[0];
     public boolean passwordGood = false;
@@ -169,20 +168,24 @@ public class GUI {
             JPasswordField pf1 = new JPasswordField();
             JPasswordField pf2 = new JPasswordField();
 
-            // Profile selector — lets user choose their threat model at vault creation time
-            // Order matches Argon2Profile severity: lowest cost → highest cost
+            JComboBox<String> DataBaseTypeSelector = new JComboBox<>(new String[]{
+                "Single User - One password, One key",
+                "Multi-User  - Many usernames/passwords, One key"
+            });
+            DataBaseTypeSelector.setSelectedIndex(0);
+            
             JComboBox<String> profileSelector = new JComboBox<>(new String[]{
                 "Minimum  - Low risk, high throughput (OWASP 2023)",
                 "Balanced - Most applications (RFC 9106)",
                 "High     - Sensitive credentials (RFC 9106)",
                 "Paranoid - Vault/master-key grade"
             });
-            // Default to BALANCED — sensible for most users without explanation
             profileSelector.setSelectedIndex(2);
 
             Object[] msg = {
                 "Create Master Password:", pf1,
                 "Confirm Password:", pf2,
+                "Type of Vault:", DataBaseTypeSelector,
                 "Security Profile:", profileSelector  // Wire in profile choice
             };
             int ok = JOptionPane.showConfirmDialog(
@@ -220,10 +223,16 @@ public class GUI {
                 VaultLevel = switch (profileSelector.getSelectedIndex()) {
                     case 0  -> "MINIMUM";
                     case 1  -> "BALANCED";
+                    case 2  -> "HIGH";
                     case 3  -> "PARANOID";
                     default -> "HIGH";
                 };
-                //sensitivityLevel = new String(selectedProfile);
+                DATABASE_TYPE = switch (DataBaseTypeSelector.getSelectedIndex()) {
+                    case 0  -> "s";
+                    case 1  -> "m";
+                    default -> "s";
+                };
+                
                 passwordGood = true;
                 break;
             }
@@ -261,16 +270,17 @@ public class GUI {
                 conn = DriverManager.getConnection("jdbc:sqlite:" + vaultPath);
 
                 if (isNew) {
-                    backend.BuildDatabase(conn, DATABASE_VER, DATABASE_TYPE, VaultLevel);
+                    backend.BuildDatabase(conn, username, DATABASE_VER, DATABASE_TYPE, VaultLevel);
+                } else {
+                   DATABASE_TYPE = backend.Pull_DB_Type(conn);
                 }
 
                 // ===== GET SALT ===== #### Pulled from vault.db radom to each vault
-                byte[] salt = backend.getOrCreateSalt(conn);
-                if (DEBUG) {System.out.println("[GUI] get Salt: " + salt);}
+                byte[] vault_salt = backend.getOrCreateSalt(conn);
                 
                 // ===== INIT BACKEND =====
                 // A salt is just random data added to a password before key derivation --- prevents Rainbow Table attacks
-                backend.GetFiredUp(masterPassword, salt, conn);
+                backend.GetFiredUp(masterPassword, vault_salt, conn, username, DATABASE_TYPE);
 
                 // ===== LOAD DATA =====
                 // Loads all data into an ArraryList
@@ -282,14 +292,12 @@ public class GUI {
                     JOptionPane.showMessageDialog(null,
                         "Failed to decrypt - wrong master password or corrupted data.",
                         "Decryption Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
-                    if (DEBUG) e.printStackTrace();
                     System.exit(1);
 
                 } catch (Exception e) {
                     JOptionPane.showMessageDialog(null,
                         "Unexpected error reading password entry.",
                         "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
-                    if (DEBUG) e.printStackTrace();
                     System.exit(1);
                 }
             } else {System.exit(1);}
