@@ -127,6 +127,16 @@ public class GUI {
             }
         }
 
+        //Load the driver!!! Go!
+        Class.forName("org.sqlite.JDBC");
+
+// ===== Vault Checks ========
+    if (!isNew) {        
+        // Then connect - Got to connect to the database, best part auto-magically
+        conn = DriverManager.getConnection("jdbc:sqlite:" + vaultPath);
+        DATABASE_TYPE = backend.Pull_DB_Type(conn);
+    }
+
 // ===== MASTER PASSWORD PROMPT =====
         
         // ======= HOOK for SHUTDOWN =======
@@ -186,7 +196,7 @@ public class GUI {
                 "Create Master Password:", pf1,
                 "Confirm Password:", pf2,
                 "Type of Vault:", DataBaseTypeSelector,
-                "Security Profile:", profileSelector  // Wire in profile choice
+                "Security Profile:", profileSelector
             };
             int ok = JOptionPane.showConfirmDialog(
                 null,
@@ -240,39 +250,48 @@ public class GUI {
         }
 
         } else {
-            // ===== AT STARTUP - ENTER PASSWORD =====
+        // ===== AT STARTUP ===================================================
             JPasswordField pf = new JPasswordField();
+            
+            if (DATABASE_TYPE.equals("m")) {
+                JTextField uf = new JTextField();
+                Object[] msg = {
+                    "Username:", uf,
+                    "Password:", pf
+                };
 
-            int ok = JOptionPane.showConfirmDialog(
+                int ok = JOptionPane.showConfirmDialog(
                     null,
-                    pf,
-                    "Enter Master Password",
+                    msg,
+                    "Login",
                     JOptionPane.OK_CANCEL_OPTION,
                     JOptionPane.PLAIN_MESSAGE
-            );
-
-            if (ok != JOptionPane.OK_OPTION) System.exit(0);
-
+                );
+                if (ok != JOptionPane.OK_OPTION) System.exit(0);
+                username = uf.getText();
+            } else {
+                Object[] msg = {
+                "Master Password:", pf
+            };
+                   int ok = JOptionPane.showConfirmDialog(
+                    null,
+                    msg,
+                    "Login",
+                    JOptionPane.OK_CANCEL_OPTION,
+                    JOptionPane.PLAIN_MESSAGE
+                );
+                if (ok != JOptionPane.OK_OPTION) System.exit(0);
+            }
             masterPassword = pf.getPassword();
             passwordGood = true;
         }
 
         if (passwordGood) {
             if (masterPassword != null && masterPassword.length != 0) {          
-                
-                
-
-                // ===== DB CONNECT =====
-                // Load the driver!!! Go!
-                Class.forName("org.sqlite.JDBC");
-                
-                // Then connect - Got to connect to the database, best part auto-magically
-                conn = DriverManager.getConnection("jdbc:sqlite:" + vaultPath);
-
+                 
                 if (isNew) {
+                    conn = DriverManager.getConnection("jdbc:sqlite:" + vaultPath);
                     backend.BuildDatabase(conn, username, DATABASE_VER, DATABASE_TYPE, VaultLevel);
-                } else {
-                   DATABASE_TYPE = backend.Pull_DB_Type(conn);
                 }
 
                 // ===== GET SALT ===== #### Pulled from vault.db radom to each vault
