@@ -175,12 +175,15 @@ No external database or installer required.
 
 
 ## Create .jar file, run commands:
+  ✔ Works on all platforms
+  ✔ No classpath needed
+  ✔ No extra files
 
-    Download the zip file of the code, off of Github. This is found under the `[<> Code]` button on `https://github.com/stormtheory/java-password-vault`.
+  Download the zip file of the code, off of Github. This is found under the `[<> Code]` button on `https://github.com/stormtheory/java-password-vault`.
 
-    Extract directory from the zip file. Run the following commands within the directory.
+  Extract directory from the zip file. Run the following commands within the directory.
 
-    On windows run the `run.bat -j` and for Linux run `./build.sh -j`
+  On windows run the `run.bat -j` and for Linux run `./build.sh -j`
 
 
 ---
@@ -225,18 +228,6 @@ No external database or installer required.
 
    5. Click the green Play Button (`Run Project`)
    6. Select GUI as your main class
-
-## Clean and Build:
-### one JAR contains everything - run anywhere
-
-            ✔ Works on all platforms
-            ✔ No classpath needed
-            ✔ No extra files
-            
-            # FAT JAR
-            On Linux run:
-
-            ./build.sh -j
 
 
 ## Database Versions

@@ -321,7 +321,7 @@ public class GUI {
                 }
 
                 // ===== GET SALT ===== #### Pulled from vault.db radom to each vault
-                byte[] vault_salt = backend.getOrCreateSalt(conn);
+                byte[] vault_salt = backend.getOrCreateVaultSalt(conn);
                 
                 // ===== INIT BACKEND =====
                 // A salt is just random data added to a password before key derivation --- prevents Rainbow Table attacks
