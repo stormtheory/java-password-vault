@@ -117,12 +117,12 @@ No external database or installer required.
     ✅ Debian 11+
     ✅ Ubuntu 20.04/22.04+
     ✅ Linux Mint 20+
-    ✅ Windows 11
+    ✅ Windows 7/10/11
 
 
 
 ## INSTALL:
-1) Download the latest released .deb package files off of github at https://github.com/stormtheory/java-password-vault/releases and install on your system.
+1) Download the latest released .jar package files off of github at https://github.com/stormtheory/java-password-vault/releases and install on your system.
 
           #### Windows/Linux/MacOS ####
           # Download then execute like normal or use Linux command:
@@ -156,8 +156,11 @@ No external database or installer required.
             
 
         # Windows Install or edit code:
-            javac -cp ".;sqlite-jdbc-3.53.0.0.jar" -d go *.java
-            
+                run.bat -br # Build and Run
+
+                # or
+
+                run.bat           
               
 
 ## RUN:
@@ -169,7 +172,18 @@ No external database or installer required.
 
         # Windows:
             Within the folder run command:
-            java -cp "go;sqlite-jdbc-3.53.0.0.jar" GUI
+            run.bat
+
+---
+
+# Create .jar file, run commands:
+
+    Download the zip file of the code, off of Github. This is found under the `[<> Code]` button on `https://github.com/stormtheory/java-password-vault`.
+
+    Extract directory from the zip file. Run the following commands within the directory.
+
+    On windows run the `run.bat -j` and for Linux run `./build.sh -j`
+
 
 ---
 
