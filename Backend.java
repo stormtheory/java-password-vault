@@ -37,7 +37,7 @@ public class Backend {
     // A salt is just random data added to a password before key derivation --- prevents Rainbow Table attacks
     protected void GetFiredUp(char[] masterPassword, byte[] vault_salt, Connection conn, String username, String type) throws Exception {
         int[] params = loadArgon2Params(conn, username);
-        this.aesKey = deriveKey(masterPassword, vault_salt, params);
+        this.aesKey = deriveKey(masterPassword, params);
         if (DEBUG) {
             System.out.println("[INIT] PASS: " + masterPassword.length * 8 + " | Salt: " + vault_salt.length * 8);
             System.out.println("[INIT] AESkey: " + this.aesKey);
@@ -65,7 +65,7 @@ public class Backend {
         // Argon2id is memory-hard, makes brute force expensive even with GPUs
         // Argon2id hybrid variant, resistant to both GPU and side-channel attacks
         // Output raw bytes are used directly as the AES key — no PBKDF2 involvement anymore!
-        private SecretKey deriveKey(char[] password, byte[] salt, int[] params) throws Exception {            
+        private SecretKey deriveKey(char[] password, int[] params) throws Exception {            
             Argon2Advanced argon2 = (Argon2Advanced) Argon2Factory.createAdvanced(Argon2Types.ARGON2id);
 
             // rawHash() returns raw bytes — exactly what AES needs as a key
@@ -276,7 +276,7 @@ public class Backend {
             )
         """);
 
-        // Meta table (for salt)
+        // Meta table (for vault_salt)
         stmt.execute("""
             CREATE TABLE meta (
                 key TEXT PRIMARY KEY,
@@ -318,7 +318,7 @@ public class Backend {
             }
 
 
-            byte[] user_salt = new byte[SALT_SIZE];
+            user_salt = new byte[SALT_SIZE];
             new java.security.SecureRandom().nextBytes(user_salt);
 
         if (type.equals("m")) {
