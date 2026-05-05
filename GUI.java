@@ -234,7 +234,7 @@ public class GUI {
         );
         if (ok != JOptionPane.OK_OPTION) System.exit(0);
             masterPassword = pf1.getPassword();
-            username = usernameField.getText();
+            if (DATABASE_TYPE.equals("m")) {username = usernameField.getText();}
             char[] p2 = pf2.getPassword();
 
             if (!java.util.Arrays.equals(masterPassword, p2)) {
@@ -294,7 +294,7 @@ public class GUI {
                     JOptionPane.PLAIN_MESSAGE
                 );
                 if (ok != JOptionPane.OK_OPTION) System.exit(0);
-                username = usernameField.getText();
+                if (DATABASE_TYPE.equals("m")) {username = usernameField.getText();}
             } else {
                 Object[] msg = {
                 "Master Password:", pf
