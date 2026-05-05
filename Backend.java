@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.*;
 import java.sql.*;
 import java.util.*;
+
 import de.mkammerer.argon2.Argon2Advanced;
 import de.mkammerer.argon2.Argon2Factory;
 import de.mkammerer.argon2.Argon2Factory.Argon2Types;
@@ -18,7 +19,8 @@ public class Backend {
     private static final int SALT_SIZE = 32;
 
     private SecretKey aesKey;
-    protected String sensitivityLevel = "BALANCED"; //DEFAULT
+    protected String VaultLevel = "";
+    protected String username = "single-user";
 
     // ===== DATA CLASS =====
     // If you build it they will come...
@@ -32,44 +34,29 @@ public class Backend {
 
     // ===== INIT (derive key once per session) ===== 
     // A salt is just random data added to a password before key derivation --- prevents Rainbow Table attacks
-    protected void GetFiredUp(char[] masterPassword, byte[] salt, Connection conn) throws Exception {
-        int[] params = loadArgon2Params(conn);
-        this.aesKey = deriveKey(masterPassword, salt, params);
+    protected void GetFiredUp(char[] masterPassword, byte[] vault_salt, Connection conn, String username, String type) throws Exception {
+        int[] params = loadArgon2Params(conn, username);
+        this.aesKey = deriveKey(masterPassword, vault_salt, params);
         if (DEBUG) {
-            System.out.println("[INIT] PASS: " + masterPassword.length * 8 + " | Salt: " + salt.length * 8);
+            System.out.println("[INIT] PASS: " + masterPassword.length * 8 + " | Salt: " + vault_salt.length * 8);
             System.out.println("[INIT] AESkey: " + this.aesKey);
             System.out.println("[INIT] AESkey initialized: " + (this.aesKey != null) + " | algorithm: " + this.aesKey.getAlgorithm() + " | size: " + (this.aesKey.getEncoded().length * 8) + " bits");}
         wipeCharArray(masterPassword);
         if (DEBUG) {System.out.println("[INIT] PASS: Wiped");}
     }
 
+
     // ===== LOAD ARGON2 PARAMETERS FROM DB =====
         // Always derive the key using the parameters the vault was CREATED with
         // Never use hardcoded constants at derive-time - who knows when the parameters may have been upgraded
-        private int[] loadArgon2Params(Connection conn) throws Exception {
+        private int[] loadArgon2Params(Connection conn, String username) throws Exception {
             PreparedStatement ps = conn.prepareStatement(
-                "SELECT key, Tvalue FROM meta WHERE key IN ('argon2_iterations','argon2_memory_kb','argon2_parallelism')"
+                "SELECT argon2_iter, argon2_mem, argon2_para FROM users WHERE user_id = ?"
             );
+            ps.setString(1, username);
             ResultSet rs = ps.executeQuery();
-        
-            Argon2Profile.Profile profile = switch (sensitivityLevel) {
-                case "MINIMUM"  -> Argon2Profile.MINIMUM;
-                case "BALANCED"   -> Argon2Profile.BALANCED;
-                case "HIGH"     -> Argon2Profile.HIGH;
-                case "VAULT"    -> Argon2Profile.PARANOID;
-                default -> throw new IllegalArgumentException("Unknown security profile: " + sensitivityLevel);
-            };
 
-            int iterations = profile.iterations() , memoryKb = profile.memoryKb(), parallelism = profile.parallelism(); // fallback defaults
-
-            while (rs.next()) {
-                switch (rs.getString("key")) {
-                    case "argon2_iterations"  -> iterations  = Integer.parseInt(rs.getString("Tvalue"));
-                    case "argon2_memory_kb"   -> memoryKb    = Integer.parseInt(rs.getString("Tvalue"));
-                    case "argon2_parallelism" -> parallelism = Integer.parseInt(rs.getString("Tvalue"));
-                }
-            }
-            return new int[]{iterations, memoryKb, parallelism};
+            return new int[]{rs.getInt("argon2_iter"), rs.getInt("argon2_mem"), rs.getInt("argon2_para")};
         }
 
     // ===== KEY DERIVATION ===== Argon2id replaced PBKDF2 entirely ===== One of the most important parts!!!! 
@@ -127,6 +114,15 @@ public class Backend {
         return result;
     }
 
+    protected String Pull_DB_Type(Connection conn) throws Exception {
+        String sql = "SELECT Tvalue FROM meta WHERE key = ?";
+        PreparedStatement stmt = conn.prepareStatement(sql);
+        stmt.setString(1, "type");
+        ResultSet rs = stmt.executeQuery();
+        return rs.getString(1);
+    }
+
+
     // ===== DB LOAD ===== This just load the database to an Arraylist and decrypt Tag and Usernames
     protected List<Credential> loadAll(Connection conn) throws Exception {
         List<Credential> list = new ArrayList<>();
@@ -138,8 +134,6 @@ public class Backend {
         while (rs.next()) {
             Credential c = new Credential();
             c.id = rs.getInt("id");
-            //c.tag = rs.getString("tag");
-            //c.username = rs.getString("username");
             c.iv = rs.getBytes("iv");
             c.tag = new String(decryptData(rs.getBytes("tag"), c.iv));
             c.username = new String(decryptData(rs.getBytes("username"), c.iv));
@@ -250,7 +244,7 @@ public class Backend {
     }
 
 
-    protected void BuildDatabase(Connection conn, String version, String type, String VaultLevel) throws Exception {
+    protected void BuildDatabase(Connection conn, String username, String version, String type, String VaultLevel) throws Exception {
         Statement stmt = conn.createStatement();
 
     // --- Or select dynamically based on context (e.g. user tier, data sensitivity) ---
@@ -258,10 +252,15 @@ public class Backend {
         case "MINIMUM"  -> Argon2Profile.MINIMUM;
         case "BALANCED"   -> Argon2Profile.BALANCED;
         case "HIGH"     -> Argon2Profile.HIGH;
-        case "VAULT"    -> Argon2Profile.PARANOID;
-        default -> throw new IllegalArgumentException("Unknown security profile: " + sensitivityLevel);
+        case "PARANOID"    -> Argon2Profile.PARANOID;
+        default -> throw new IllegalArgumentException("Unknown security profile: " + VaultLevel);
     };
-    
+
+        //stmt.execute("""
+        //    PRAGMA journal_mode=WAL;
+        //    PRAGMA foreign_keys=ON;
+        //""");
+
         // Vault table
         stmt.execute("""
             CREATE TABLE vault (
@@ -281,8 +280,24 @@ public class Backend {
                 Tvalue Text
             )
         """);
-        
-        try (PreparedStatement insert = conn.prepareStatement(
+
+        // Users table
+        stmt.execute("""
+            CREATE TABLE users (
+                user_id TEXT PRIMARY KEY,
+                role TEXT,
+                wrapped_vk BLOB,
+                salt BLOB,
+                iv BLOB,
+                argon2_iter INTEGER,
+                argon2_mem INTEGER,
+                argon2_para INTEGER,
+                created_at INTERGER,
+                last_login INTEGER
+            )
+        """);
+
+            try (PreparedStatement insert = conn.prepareStatement(
             "INSERT INTO meta(key,Tvalue) VALUES(?,?)")) {
 
                 // Schema version — for future migrations
@@ -293,24 +308,34 @@ public class Backend {
                 // Database type identifier
                 insert.setString(1, "type");
                 insert.setString(2, type);
+                insert.addBatch(); 
+                insert.executeBatch();
+            }
+
+        if (type.equals("m")) {
+            try (PreparedStatement insert = conn.prepareStatement(
+                "INSERT INTO users(user_id,role,wrapped_vk,salt,iv,argon2_iter,argon2_mem,argon2_para) VALUES(?,?,?,?,?,?,?,?)")) {
+                insert.setString(1, username);
+                insert.setInt(6, profile.iterations());
+                insert.setInt(7, profile.memoryKb());
+                insert.setInt(8, profile.parallelism());
                 insert.addBatch();
 
-                insert.setString(1, "argon2_iterations");
+                insert.executeBatch();
+            }
+        } else if (type.equals("s")){
+            try (PreparedStatement insert = conn.prepareStatement(
+                "INSERT INTO users(user_id,argon2_iter,argon2_mem,argon2_para) VALUES(?,?,?,?)")) {
+                insert.setString(1, username);
                 insert.setInt(2, profile.iterations());
+                insert.setInt(3, profile.memoryKb());
+                insert.setInt(4, profile.parallelism());
                 insert.addBatch();
 
-                insert.setString(1, "argon2_memory_kb");
-                insert.setInt(2, profile.memoryKb());
-                insert.addBatch();
-
-                insert.setString(1, "argon2_parallelism");
-                insert.setInt(2, profile.parallelism());
-                insert.addBatch();
-
-                // Execute all inserts in one round-trip to the database
                 insert.executeBatch();
             }
         }
+    }
 
         // ===== SALT HANDLING =====
         // A salt is just random data added to a password before key derivation --- prevents Rainbow Table attacks
