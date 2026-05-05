@@ -1,10 +1,11 @@
-import javax.swing.*;
-import javax.swing.table.*;
 import java.awt.*;
+import java.awt.event.ItemEvent;
 import java.io.File;
 import java.sql.*;
-import java.util.List;
 import java.util.ArrayList;
+import java.util.List;
+import javax.swing.*;
+import javax.swing.table.*;
 
 public class GUI {
     
@@ -174,41 +175,66 @@ public class GUI {
         if (isNew) {
             while (true) {
             // ===== CREATE PASSWORD =====
-            // if no vault.db then prompt for a password and make a vault
-            JPasswordField pf1 = new JPasswordField();
-            JPasswordField pf2 = new JPasswordField();
+        // If no vault.db — prompt for password and vault type
+        JPasswordField pf1      = new JPasswordField(20);
+        JPasswordField pf2      = new JPasswordField(20);
+        JTextField     usernameField = new JTextField(20);
+        JLabel         more_space   = new JLabel(" ");
+        JLabel         more_space1   = new JLabel(" ");
+        JLabel         more_space2   = new JLabel(" ");
+        JLabel         ufl_spacer   = new JLabel(" ");
+        JLabel         uf_spacer   = new JLabel(" ");
+        JLabel         usernameLabel = new JLabel("Username:");
 
-            JComboBox<String> DataBaseTypeSelector = new JComboBox<>(new String[]{
-                "Single User - One password, One key",
-                "Multi-User  - Many usernames/passwords, One key"
-            });
-            DataBaseTypeSelector.setSelectedIndex(0);
-            
-            JComboBox<String> profileSelector = new JComboBox<>(new String[]{
-                "Minimum  - Low risk, high throughput (OWASP 2023)",
-                "Balanced - Most applications (RFC 9106)",
-                "High     - Sensitive credentials (RFC 9106)",
-                "Paranoid - Vault/master-key grade"
-            });
-            profileSelector.setSelectedIndex(2);
+        usernameField.setVisible(false);
+        usernameLabel.setVisible(false);
 
-            Object[] msg = {
-                "Create Master Password:", pf1,
-                "Confirm Password:", pf2,
-                "Type of Vault:", DataBaseTypeSelector,
-                "Security Profile:", profileSelector
-            };
-            int ok = JOptionPane.showConfirmDialog(
-                null,
-                msg,
-                "Create Master Password",
-                JOptionPane.OK_CANCEL_OPTION,
-                JOptionPane.PLAIN_MESSAGE
-            );
+        JComboBox<String> DataBaseSelector = new JComboBox<>(new String[]{
+            "Single User - One password, One key",
+            "Multi-User  - Many usernames/passwords, One key"
+        });
+        DataBaseSelector.setSelectedIndex(0);
 
-            if (ok != JOptionPane.OK_OPTION) System.exit(0);
+        JComboBox<String> profileSelector = new JComboBox<>(new String[]{
+            "Minimum  - Low risk, high throughput (OWASP 2023)",
+            "Balanced - Most applications (RFC 9106)",
+            "High     - Sensitive credentials (RFC 9106)",
+            "Paranoid - Vault/master-key grade"
+        });
+        profileSelector.setSelectedIndex(2);
 
+        // Show/hide username field when vault type changes
+        DataBaseSelector.addItemListener(e -> {
+            if (e.getStateChange() == ItemEvent.SELECTED) {
+                boolean multi = DataBaseSelector.getSelectedIndex() == 1;
+                usernameLabel.setVisible(multi);
+                ufl_spacer.setVisible(!multi);
+                usernameField.setVisible(multi);
+                uf_spacer.setVisible(!multi);
+            }
+        });
+
+        Object[] msg = {
+            more_space1, more_space1,
+                ufl_spacer,ufl_spacer,
+            "Type of Vault:",          DataBaseSelector,
+            more_space2, more_space2,
+                usernameLabel, usernameField,
+            "Create Master Password:", pf1,
+            "Confirm Password:",       pf2,
+            more_space, more_space,
+            "Security Profile:",       profileSelector,
+                uf_spacer, uf_spacer
+        };
+
+        int ok = JOptionPane.showConfirmDialog(
+            null, msg, "Create Vault",
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.PLAIN_MESSAGE
+        );
+        if (ok != JOptionPane.OK_OPTION) System.exit(0);
             masterPassword = pf1.getPassword();
+            username = usernameField.getText();
             char[] p2 = pf2.getPassword();
 
             if (!java.util.Arrays.equals(masterPassword, p2)) {
@@ -237,7 +263,7 @@ public class GUI {
                     case 3  -> "PARANOID";
                     default -> "HIGH";
                 };
-                DATABASE_TYPE = switch (DataBaseTypeSelector.getSelectedIndex()) {
+                DATABASE_TYPE = switch (DataBaseSelector.getSelectedIndex()) {
                     case 0  -> "s";
                     case 1  -> "m";
                     default -> "s";
@@ -254,9 +280,9 @@ public class GUI {
             JPasswordField pf = new JPasswordField();
             
             if (DATABASE_TYPE.equals("m")) {
-                JTextField uf = new JTextField();
+                JTextField usernameField = new JTextField();
                 Object[] msg = {
-                    "Username:", uf,
+                    "Username:", usernameField,
                     "Password:", pf
                 };
 
@@ -268,7 +294,7 @@ public class GUI {
                     JOptionPane.PLAIN_MESSAGE
                 );
                 if (ok != JOptionPane.OK_OPTION) System.exit(0);
-                username = uf.getText();
+                username = usernameField.getText();
             } else {
                 Object[] msg = {
                 "Master Password:", pf

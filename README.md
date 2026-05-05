@@ -70,6 +70,13 @@ Tags, Usernames, and Passwords are stored as encrypted binary blobs.
 
 ---
 
+## 🖥️ Platforms Supported (Tested On)
+
+    ✅ Debian 11+
+    ✅ Ubuntu 20.04/22.04+
+    ✅ Linux Mint 20+
+    ✅ Windows 7/10/11
+
 ## ⚙️ Requirements
 
 * Java JDK 17+ (tested on newer versions)
@@ -112,14 +119,6 @@ No external database or installer required.
 * Address data storage
 
 ---
-## 🖥️ Platforms Supported (Tested On)
-
-    ✅ Debian 11+
-    ✅ Ubuntu 20.04/22.04+
-    ✅ Linux Mint 20+
-    ✅ Windows 7/10/11
-
-
 
 ## INSTALL:
 1) Download the latest released .jar package files off of github at https://github.com/stormtheory/java-password-vault/releases and install on your system.
@@ -174,9 +173,8 @@ No external database or installer required.
             Within the folder run command:
             run.bat
 
----
 
-# Create .jar file, run commands:
+## Create .jar file, run commands:
 
     Download the zip file of the code, off of Github. This is found under the `[<> Code]` button on `https://github.com/stormtheory/java-password-vault`.
 

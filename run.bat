@@ -2,8 +2,8 @@
 :: ####################################################################
 :: ##
 :: ##              WINDOWS (7 / 10 / 11 / Server 2008+)
-:: ##        Script is to make building, launching,
-:: ## and running easier with command line (CLI) arguments
+:: ##             Script is to make building, launching,
+:: ##      and running easier with command line (CLI) arguments
 :: ##
 :: ##               With Love, Stormtheory
 :: ##
