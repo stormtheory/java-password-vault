@@ -33,6 +33,7 @@ public class Backend {
     protected String VK_STATUS = "";
     //protected String username = "";
     private static byte[] user_salt;
+    protected DatabaseUtilities databaseutilities = new DatabaseUtilities();
 
     // ===== DATA CLASS =====
     // If you build it they will come...
@@ -51,7 +52,7 @@ public class Backend {
         int[] params = loadArgon2Params(conn, username);
         user_salt = loadUserSalt(conn, username);
         User_AES_Key = deriveKey(masterPassword, params, username, user_salt, conn);
-        VK_STATUS = Pull_DB_Status(conn, "vk_status");
+        VK_STATUS = databaseutilities.Pull_DB_Status(conn, "vk_status");
         if (type.equals("m")){
             if (VK_STATUS.equals("gen")){
                Vault_KEY = generateVaultKey();
@@ -65,7 +66,7 @@ public class Backend {
                     update.setString(2, username);
                     update.executeUpdate();
                 }
-                Update_DB_Status(conn, "vk_status", "true");
+                databaseutilities.Update_DB_Status(conn, "vk_status", "true");
                 wipeByteArray(wrappedKey);
             } 
             else if (VK_STATUS.equals("true")){
@@ -94,6 +95,7 @@ public class Backend {
     }
 
     protected static void cleanupWipeDown() throws Exception {
+        System.out.println("Cleaning Backend");
         wipeByteArray(User_AES_Key);
         wipeByteArray(Vault_Use_Key);
         wipeByteArray(Vault_KEY);
@@ -207,24 +209,6 @@ public class Backend {
             return plaintext;
         }
 
-    protected String Pull_DB_Status(Connection conn, String key) throws Exception {
-        String sql = "SELECT Tvalue FROM meta WHERE key = ?";
-        PreparedStatement stmt = conn.prepareStatement(sql);
-        stmt.setString(1, key);
-        ResultSet rs = stmt.executeQuery();
-        return rs.getString(1);
-
-    }
-
-    protected void Update_DB_Status(Connection conn, String key, String value) throws Exception {
-        String sql = "UPDATE meta SET Tvalue = ? WHERE key = ?";
-        PreparedStatement update = conn.prepareStatement(sql);
-        update.setString(1, value);
-        update.setString(2, key);
-        update.executeUpdate();
-    }
-
-
     // ===== DB LOAD ===== This just load the database to an Arraylist and decrypt Tag and Usernames
     protected List<Credential> loadAll(Connection conn) throws Exception {
         List<Credential> list = new ArrayList<>();
@@ -274,14 +258,6 @@ public class Backend {
         wipeByteArray(encrypted_pass);
     }
 
-    // ===== DELETE ENTRY ===== ----- Yup
-    protected void deleteEntry(Connection conn, int id) throws Exception {
-        String sql = "DELETE FROM vault WHERE id = ?";
-        PreparedStatement stmt = conn.prepareStatement(sql);
-        stmt.setInt(1, id);
-        stmt.executeUpdate();
-    }
-
     private byte[] wrapVaultKey(byte[] new_User_AES_Key) throws Exception {
         // Wrap Vault Key with Argon2 generated key
             Cipher cipher = Cipher.getInstance("AESWrapPad");
@@ -327,14 +303,6 @@ public class Backend {
         wipeByteArray(new_User_AES_Key);
         wipeByteArray(newWrappedKey);
         wipeCharArray(newPassword);
-    }
-
-    // ===== User DELETE ===== ----- Yup
-    protected void userdelEntry(Connection conn, String user_id) throws Exception {
-        String sql = "DELETE FROM users WHERE user_id = ?";
-        PreparedStatement stmt = conn.prepareStatement(sql);
-        stmt.setString(1, user_id);
-        stmt.executeUpdate();
     }
 
     // ===== UPDATE PASSWORD ===== --- I think this is obvious....

@@ -10,9 +10,9 @@ import javax.swing.table.*;
 public class GUI {
     
 // ===== CONFIG =====
-    private int PASSWORD_LENGTH = 8;
-    private String DATABASE_VER = "0";
-    private int CLIPBOARD_CLEAR_SEC = 60_000;
+    private static final int PASSWORD_LENGTH = 8;
+    private static final String DATABASE_VER = "0";
+    private static final int CLIPBOARD_CLEAR_SEC = 60_000;
 
 // ===== DEFAULT FIELDS ======
     public boolean DEBUG = false; //true or false, set to false before production
@@ -21,10 +21,11 @@ public class GUI {
     private String username = "single-user";
     protected String VaultLevel = "";
     public boolean isWindows = System.getProperty("os.name").toLowerCase().startsWith("windows");
-    private char[] masterPassword = new char[0];
+    private static char[] masterPassword = new char[0];
     public boolean passwordGood = false;
     private ImageIcon dialogIcon = null;
     protected Backend backend = new Backend();
+    protected DatabaseUtilities databaseutilities = new DatabaseUtilities();
     private Connection conn;
     private JTable table;
     private DefaultTableModel model;
@@ -131,47 +132,17 @@ public class GUI {
         //Load the driver!!! Go!
         Class.forName("org.sqlite.JDBC");
 
-// ===== Vault Checks ========
-    if (!isNew) {        
-        // Then connect - Got to connect to the database, best part auto-magically
-        conn = DriverManager.getConnection("jdbc:sqlite:" + vaultPath);
-        DATABASE_TYPE = backend.Pull_DB_Status(conn, "type");
-    }
+        // ===== Vault Checks ========
+        if (!isNew) {        
+            // Then connect - Got to connect to the database, best part auto-magically
+            conn = DriverManager.getConnection("jdbc:sqlite:" + vaultPath);
+            DATABASE_TYPE = databaseutilities.Pull_DB_Status(conn, "type");
+        }
 
-// ===== MASTER PASSWORD PROMPT =====
-        
+        // ===== MASTER PASSWORD PROMPT =====
+
         // ======= HOOK for SHUTDOWN =======
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            System.out.println("[Shutdown Hook] Running cleanup command...");
- 
-            try {
-                // SECURITY CRITICAL: Wipe master password from memory before JVM exits
-                // Prevents sensitive data staying in memory heap which mitigates memory dump attacks
-                Backend.cleanupWipeDown();
-                Backend.wipeCharArray(masterPassword);
-
-                // Using ProcessBuilder is safer than Runtime.exec() — avoids shell injection
-                // Say goodnight to tell me we are gracefully shutdown.
-                ProcessBuilder pb = isWindows
-                    ? new ProcessBuilder("cmd.exe", "/c", "Goodbye...")
-                    : new ProcessBuilder("echo", "Goodbye...");
-                    // e.g. "bash", "-c", "your-script.sh"
-                    // e.g. "python3", "/opt/cleanup.py"
- 
-                // Inherit stdout/stderr so output is visible in the terminal
-                pb.inheritIO();
- 
-                Process process = pb.start();
-                int exitCode = process.waitFor();
- 
-                System.out.println(exitCode);
- 
-            } catch (Exception e) {
-                // Log but don't rethrow — throwing inside a hook is silently ignored
-                System.err.println("[Shutdown Hook] Failed to run command: " + e.getMessage());
-            }
-        }, "shutdown-hook-thread"));
-
+        DatabaseUtilities.registerShutdownHook(isWindows);
 
         if (isNew) {
             while (true) {
@@ -307,6 +278,7 @@ public class GUI {
                 // ===== INIT BACKEND =====
                 // A salt is just random data added to a password before key derivation --- prevents Rainbow Table attacks
                 backend.GetFiredUp(masterPassword, vault_salt, conn, username, DATABASE_TYPE);
+                Backend.wipeCharArray(masterPassword);
 
                 // ===== LOAD DATA =====
                 // Loads all data into an ArraryList
@@ -336,7 +308,7 @@ public class GUI {
         frame.setSize(600, 400);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
-        IdleTimeoutManager idleManager = new IdleTimeoutManager(frame, masterPassword);
+        IdleTimeoutManager idleManager = new IdleTimeoutManager(frame);
         idleManager.start();
 
         model = new DefaultTableModel(new Object[]{"ID", "Tag", "Username", "Password", "Actions"}, 0) {
@@ -541,7 +513,7 @@ public class GUI {
         if (confirm == JOptionPane.YES_OPTION) {
             try {
                 int id = (int) model.getValueAt(row, 0);
-                backend.deleteEntry(conn, id);
+                databaseutilities.deleteEntry(conn, id);
 
                 credentials = backend.loadAll(conn);
                 refreshTable();
@@ -601,7 +573,7 @@ public class GUI {
             if (option == JOptionPane.OK_OPTION) {
                 if (!userField.equals(current_username)){
                 try {
-                    backend.userdelEntry(conn, userField.getText());
+                    databaseutilities.userdelEntry(conn, userField.getText());
 
                 } catch (Exception e) {
                     e.printStackTrace();
