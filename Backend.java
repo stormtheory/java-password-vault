@@ -1,13 +1,21 @@
-import javax.crypto.*;
 import javax.crypto.spec.*;
 import java.nio.charset.StandardCharsets;
-import java.security.*;
+import java.security.SecureRandom;
+import javax.security.auth.DestroyFailedException;
+import javax.crypto.KeyGenerator;
+import javax.crypto.Cipher;
+import javax.crypto.SecretKey;
 import java.sql.*;
 import java.util.*;
 
 import de.mkammerer.argon2.Argon2Advanced;
 import de.mkammerer.argon2.Argon2Factory;
 import de.mkammerer.argon2.Argon2Factory.Argon2Types;
+
+import org.bouncycastle.crypto.engines.AESEngine;
+import org.bouncycastle.crypto.modes.GCMBlockCipher;
+import org.bouncycastle.crypto.params.AEADParameters;
+import org.bouncycastle.crypto.params.KeyParameter;
 
 public class Backend {
     public boolean DEBUG = false; //true or false set to false before production
@@ -18,10 +26,13 @@ public class Backend {
     private static final int IV_LENGTH = 12;
     private static final int SALT_SIZE = 32;
 
-    private SecretKey aesKey;
+    private static byte[] User_AES_Key;
+    private static byte[] Vault_KEY;
+    private static byte[] Vault_Use_Key;
     protected String VaultLevel = "";
-    protected String username = "single-user";
-    private byte[] user_salt;
+    protected String VK_STATUS = "";
+    //protected String username = "";
+    private static byte[] user_salt;
 
     // ===== DATA CLASS =====
     // If you build it they will come...
@@ -33,19 +44,62 @@ public class Backend {
         protected byte[] iv;
     }
 
-    // ===== INIT (derive key once per session) ===== 
+    // ===== FIRE THEM UP (INIT) ===== 
     // A salt is just random data added to a password before key derivation --- prevents Rainbow Table attacks
     protected void GetFiredUp(char[] masterPassword, byte[] vault_salt, Connection conn, String username, String type) throws Exception {
+        System.out.println(username);
         int[] params = loadArgon2Params(conn, username);
-        this.aesKey = deriveKey(masterPassword, params);
-        if (DEBUG) {
-            System.out.println("[INIT] PASS: " + masterPassword.length * 8 + " | Salt: " + vault_salt.length * 8);
-            System.out.println("[INIT] AESkey: " + this.aesKey);
-            System.out.println("[INIT] AESkey initialized: " + (this.aesKey != null) + " | algorithm: " + this.aesKey.getAlgorithm() + " | size: " + (this.aesKey.getEncoded().length * 8) + " bits");}
+        User_AES_Key = deriveKey(masterPassword, params, username, conn);
+        VK_STATUS = Pull_DB_Status(conn, "vk_status");
+        if (type.equals("m")){
+            if (VK_STATUS.equals("gen")){
+               Vault_KEY = generateVaultKey();
+
+                // Wrap Vault Key with Argon2 generated key
+                Cipher cipher = Cipher.getInstance("AESWrapPad");
+                cipher.init(Cipher.WRAP_MODE, new SecretKeySpec(User_AES_Key, "AES"));
+                byte[] wrappedKey = cipher.wrap(new SecretKeySpec(Vault_KEY, "AES"));
+               
+                // Save the wrapped key
+                try (PreparedStatement update = conn.prepareStatement(
+                    "UPDATE users SET wrapped_vk = ? WHERE user_id = ?")) {
+                    update.setBytes(1, wrappedKey);
+                    update.setString(2, username);
+                    update.executeUpdate();
+                }
+                Update_DB_Status(conn, "vk_status", "true");
+                wipeByteArray(wrappedKey);
+            } 
+            else if (VK_STATUS.equals("true")){
+                String sql = "SELECT wrapped_vk FROM users WHERE user_id = ?";
+                PreparedStatement stmt = conn.prepareStatement(sql);
+                stmt.setString(1, username);
+                ResultSet rs = stmt.executeQuery();
+
+                // Extract wrapped key bytes from result
+                Cipher cipher = Cipher.getInstance("AESWrapPad");
+                cipher.init(Cipher.UNWRAP_MODE, new SecretKeySpec(User_AES_Key, "AES"));
+                SecretKey tempKey = (SecretKey) cipher.unwrap(rs.getBytes("wrapped_vk"), "AES", Cipher.SECRET_KEY);
+                Vault_KEY = tempKey.getEncoded();
+                try { tempKey.destroy(); } catch (DestroyFailedException e) { /* expected */ }
+                wipeByteArray(User_AES_Key);
+            }
+        }
+
+        if (type.equals("m")){
+            Vault_Use_Key = Vault_KEY;
+        } else {
+            Vault_Use_Key = User_AES_Key;
+        }
+
         wipeCharArray(masterPassword);
-        if (DEBUG) {System.out.println("[INIT] PASS: Wiped");}
     }
 
+    protected static void cleanupWipeDown() throws Exception {
+        wipeByteArray(User_AES_Key);
+        wipeByteArray(Vault_Use_Key);
+        wipeByteArray(Vault_KEY);
+    }
 
     // ===== LOAD ARGON2 PARAMETERS FROM DB =====
         // Always derive the key using the parameters the vault was CREATED with
@@ -60,67 +114,115 @@ public class Backend {
             return new int[]{rs.getInt("argon2_iter"), rs.getInt("argon2_mem"), rs.getInt("argon2_para")};
         }
 
+        private byte[] loadUserSalt(Connection conn, String username) throws Exception {
+            PreparedStatement ps = conn.prepareStatement(
+                "SELECT argon2_iter, argon2_mem, argon2_para, salt FROM users WHERE user_id = ?"
+            );
+            ps.setString(1, username);
+            ResultSet rs = ps.executeQuery();
+                return rs.getBytes("salt");
+            }
+
     // ===== KEY DERIVATION ===== Argon2id replaced PBKDF2 entirely ===== One of the most important parts!!!! 
         // Key derivation turns a human readable password into a strong cryptographic key
         // Argon2id is memory-hard, makes brute force expensive even with GPUs
         // Argon2id hybrid variant, resistant to both GPU and side-channel attacks
         // Output raw bytes are used directly as the AES key — no PBKDF2 involvement anymore!
-        private SecretKey deriveKey(char[] password, int[] params) throws Exception {            
+        private byte[] deriveKey(char[] password, int[] params, String username, Connection conn) throws Exception {
             Argon2Advanced argon2 = (Argon2Advanced) Argon2Factory.createAdvanced(Argon2Types.ARGON2id);
 
             // rawHash() returns raw bytes — exactly what AES needs as a key
-            byte[] keyBytes = argon2.rawHash(params[0], params[1], params[2], password, user_salt);
+            byte[] keyBytes = argon2.rawHash(params[0], params[1], params[2], password, loadUserSalt(conn, username));
 
             // Check to make sure key is 32 bytes, which is what AES-256 uses for a key
             if (keyBytes.length < 32) {
                 throw new SecurityException("Derived key too short for AES-256");
             }
 
-            // Wrap raw bytes as AES key
-            SecretKey key = new SecretKeySpec(keyBytes, "AES");
-            
-            // Wipe raw key bytes from memory immediately after wrapping
-            wipeByteArray(keyBytes);
-
-            return key;
+            // Return raw bytes directly — caller must wipe with Arrays.fill after use
+            return keyBytes;
         }
+
+        private static byte[] generateVaultKey() throws Exception {
+            // Initialize AES key generator with 256-bit key size
+            KeyGenerator keyGen = KeyGenerator.getInstance("AES");
+            keyGen.init(256, new java.security.SecureRandom());
+
+            // Extract raw bytes immediately — byte[] is wipeable unlike SecretKey
+            SecretKey key = keyGen.generateKey();
+            byte[] keyBytes = key.getEncoded();
+
+            // Best-effort wipe of the SecretKey — may fail on some JDKs
+            try { key.destroy(); } catch (DestroyFailedException e) { /* expected */ }
+
+            return keyBytes;
+}
 
 
     // ===== ENCRYPT ===== using AES256-GCM which AES is like a lock 🔒 and GCM is the tamper seal 🧾
     // 🔒 will encrypt whatever data you feed into it, then return the ecypted value
     // IV is a random value used during encryption so that the same input doesn’t produce the same hash output
     // Generated for us whenever new data cycle/set is saved
-    private byte[] encrypt(char[] plaintext, byte[] iv) throws Exception {
-        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
-        cipher.init(Cipher.ENCRYPT_MODE, aesKey, spec);
-
-        byte[] data = new String(plaintext).getBytes(StandardCharsets.UTF_8);
-        byte[] encrypted_data = cipher.doFinal(data);
-
-        wipeByteArray(data);
-        return encrypted_data;
-    }
+            private byte[] encryptData(char[] plaintext, byte[] iv) throws Exception {
+            // Convert char[] to bytes so we can wipe after use
+            byte[] data = new String(plaintext).getBytes(StandardCharsets.UTF_8);
+            // KeyParameter holds raw key bytes — wipeable unlike SecretKey
+            KeyParameter keyParam = new KeyParameter(Vault_Use_Key);
+            // GCM mode — authenticated encryption, 128-bit tag
+            GCMBlockCipher cipher = new GCMBlockCipher(new AESEngine());
+            AEADParameters params = new AEADParameters(keyParam, GCM_TAG_LENGTH, iv);
+            cipher.init(true, params); // true = encrypt
+            // Allocate output buffer and process
+            byte[] encrypted_data = new byte[cipher.getOutputSize(data.length)];
+            int len = cipher.processBytes(data, 0, data.length, encrypted_data, 0);
+            cipher.doFinal(encrypted_data, len);
+            // Wipe sensitive byte arrays immediately after use
+            wipeByteArray(data);
+            Arrays.fill(keyParam.getKey(), (byte) 0);
+            return encrypted_data;
+        }
 
     // ===== DECRYPT (ON DEMAND ONLY) =====
-    protected char[] decryptData(byte[] encrypted_data, byte[] iv) throws Exception {
-        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
-        cipher.init(Cipher.DECRYPT_MODE, aesKey, spec);
+            protected char[] decryptData(byte[] encrypted_data, byte[] iv) throws Exception {
 
-        byte[] decrypted_charset = cipher.doFinal(encrypted_data);
-        char[] plaintext = new String(decrypted_charset, StandardCharsets.UTF_8).toCharArray();
+            // KeyParameter holds raw key bytes — wipeable unlike SecretKey
+            KeyParameter keyParam = new KeyParameter(Vault_Use_Key);
 
-        wipeByteArray(decrypted_charset);
-        return plaintext;
-    }
+            // GCM mode — authenticated decryption, 128-bit tag
+            GCMBlockCipher cipher = new GCMBlockCipher(new AESEngine());
+            AEADParameters params = new AEADParameters(keyParam, GCM_TAG_LENGTH, iv);
+            cipher.init(false, params); // false = decrypt
 
-    protected String Pull_DB_Type(Connection conn) throws Exception {
+            // Allocate output buffer and process
+            byte[] decrypted_charset = new byte[cipher.getOutputSize(encrypted_data.length)];
+            int len = cipher.processBytes(encrypted_data, 0, encrypted_data.length, decrypted_charset, 0);
+            cipher.doFinal(decrypted_charset, len);
+
+            // Convert to char[] so we can wipe the byte[] after
+            char[] plaintext = new String(decrypted_charset, StandardCharsets.UTF_8).toCharArray();
+
+            // Wipe sensitive byte arrays immediately after use
+            wipeByteArray(decrypted_charset);
+            Arrays.fill(keyParam.getKey(), (byte) 0);
+
+            return plaintext;
+        }
+
+    protected String Pull_DB_Status(Connection conn, String key) throws Exception {
         String sql = "SELECT Tvalue FROM meta WHERE key = ?";
         PreparedStatement stmt = conn.prepareStatement(sql);
-        stmt.setString(1, "type");
+        stmt.setString(1, key);
         ResultSet rs = stmt.executeQuery();
         return rs.getString(1);
+
+    }
+
+    protected void Update_DB_Status(Connection conn, String key, String value) throws Exception {
+        String sql = "UPDATE meta SET Tvalue = ? WHERE key = ?";
+        PreparedStatement update = conn.prepareStatement(sql);
+        update.setString(1, value);
+        update.setString(2, key);
+        update.executeUpdate();
     }
 
 
@@ -139,7 +241,6 @@ public class Backend {
             c.tag = new String(decryptData(rs.getBytes("tag"), c.iv));
             c.username = new String(decryptData(rs.getBytes("username"), c.iv));
             c.encryptedPassword = rs.getBytes("password");
-
             list.add(c);
         }
 
@@ -147,11 +248,12 @@ public class Backend {
     }
 
     // ===== ADD ENTRY =====  ---- Has to happen at some point?
-    protected void addEntry(Connection conn, char[] tag, char[] username, char[] password) throws Exception {
+    protected void addEntry(Connection conn, char[] tag, char[] username, char[] password, String type) throws Exception {
         byte[] iv = generateIV();
-        byte[] encrypted_tag = encrypt(tag, iv);
-        byte[] encrypted_username = encrypt(username, iv);
-        byte[] encrypted_pass = encrypt(password, iv);
+        
+        byte[] encrypted_tag = encryptData(tag, iv);
+        byte[] encrypted_username = encryptData(username, iv);
+        byte[] encrypted_pass = encryptData(password, iv);
         
         String sql = "INSERT INTO vault(tag, username, password, iv) VALUES (?, ?, ?, ?)";
         PreparedStatement stmt = conn.prepareStatement(sql);
@@ -186,7 +288,7 @@ public class Backend {
     // Will need to update both Tag and Username as well
     protected void updatePassword(Connection conn, int id, char[] newPassword) throws Exception {
         byte[] iv = generateIV();
-        byte[] encrypted_pass = encrypt(newPassword, iv);
+        byte[] encrypted_pass = encryptData(newPassword, iv);
 
         String sql = "UPDATE vault SET password = ?, iv = ? WHERE id = ?";
         PreparedStatement stmt = conn.prepareStatement(sql);
@@ -206,7 +308,7 @@ public class Backend {
     // Will need to update both Tag and Password as well
     protected void updateUsername(Connection conn, int id, char[] newUsername) throws Exception {
         byte[] iv = generateIV();
-        byte[] encrypted_pass = encrypt(newUsername, iv);
+        byte[] encrypted_pass = encryptData(newUsername, iv);
 
         String sql = "UPDATE vault SET username = ?, iv = ? WHERE id = ?";
         PreparedStatement stmt = conn.prepareStatement(sql);
@@ -292,7 +394,6 @@ public class Backend {
                 role TEXT,
                 wrapped_vk BLOB,
                 salt BLOB,
-                iv BLOB,
                 argon2_iter INTEGER,
                 argon2_mem INTEGER,
                 argon2_para INTEGER,
@@ -313,6 +414,14 @@ public class Backend {
                 insert.setString(1, "type");
                 insert.setString(2, type);
                 insert.addBatch();
+
+                if (type.equals("m")) {
+                    // Database VK has been generatored True/False/Gen identifier
+                    VK_STATUS = "gen";
+                    insert.setString(1, "vk_status");
+                    insert.setString(2, "gen");
+                    insert.addBatch();
+                }
 
                 insert.executeBatch();
             }
