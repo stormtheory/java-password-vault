@@ -325,7 +325,6 @@ public class GUI {
                 
                 // ===== INIT BACKEND =====
                 // A salt is just random data added to a password before key derivation --- prevents Rainbow Table attacks
-                System.out.println(username);
                 backend.GetFiredUp(masterPassword, vault_salt, conn, username, DATABASE_TYPE);
 
                 // ===== LOAD DATA =====

@@ -41,8 +41,9 @@ public class Backend {
     // ===== FIRE THEM UP (INIT) ===== 
     // A salt is just random data added to a password before key derivation --- prevents Rainbow Table attacks
     protected void GetFiredUp(char[] masterPassword, byte[] vault_salt, Connection conn, String username, String type) throws Exception {
+        System.out.println(username);
         int[] params = loadArgon2Params(conn, username);
-        User_AES_Key = deriveKey(masterPassword, params);
+        User_AES_Key = deriveKey(masterPassword, params, username, conn);
         VK_STATUS = Pull_DB_Status(conn, "vk_status");
         if (type.equals("m")){
             if (VK_STATUS.equals("gen")){
@@ -92,10 +93,9 @@ public class Backend {
     }
 
     protected static void cleanupWipeDown() throws Exception {
-        User_AES_Key.destroy();
-        Vault_Use_Key.destroy();
-        Vault_KEY.destroy();
-        
+        try {if (User_AES_Key != null) User_AES_Key.destroy();}catch (Exception t) { System.out.println(t); }
+        try {if (Vault_Use_Key != null) Vault_Use_Key.destroy();}catch (Exception g) { System.out.println(g); }
+        try {if (Vault_KEY != null) Vault_KEY.destroy();}catch (Exception r) { System.out.println(r); }
     }
 
     // ===== LOAD ARGON2 PARAMETERS FROM DB =====
@@ -111,16 +111,25 @@ public class Backend {
             return new int[]{rs.getInt("argon2_iter"), rs.getInt("argon2_mem"), rs.getInt("argon2_para")};
         }
 
+        private byte[] loadUserSalt(Connection conn, String username) throws Exception {
+            PreparedStatement ps = conn.prepareStatement(
+                "SELECT argon2_iter, argon2_mem, argon2_para, salt FROM users WHERE user_id = ?"
+            );
+            ps.setString(1, username);
+            ResultSet rs = ps.executeQuery();
+                return rs.getBytes("salt");
+            }
+
     // ===== KEY DERIVATION ===== Argon2id replaced PBKDF2 entirely ===== One of the most important parts!!!! 
         // Key derivation turns a human readable password into a strong cryptographic key
         // Argon2id is memory-hard, makes brute force expensive even with GPUs
         // Argon2id hybrid variant, resistant to both GPU and side-channel attacks
         // Output raw bytes are used directly as the AES key — no PBKDF2 involvement anymore!
-        private SecretKey deriveKey(char[] password, int[] params) throws Exception {            
+        private SecretKey deriveKey(char[] password, int[] params, String username, Connection conn ) throws Exception {            
             Argon2Advanced argon2 = (Argon2Advanced) Argon2Factory.createAdvanced(Argon2Types.ARGON2id);
 
             // rawHash() returns raw bytes — exactly what AES needs as a key
-            byte[] keyBytes = argon2.rawHash(params[0], params[1], params[2], password, user_salt);
+            byte[] keyBytes = argon2.rawHash(params[0], params[1], params[2], password, loadUserSalt(conn, username));
 
             // Check to make sure key is 32 bytes, which is what AES-256 uses for a key
             if (keyBytes.length < 32) {
@@ -183,10 +192,10 @@ public class Backend {
 
     }
 
-    protected void Update_DB_Status(Connection conn, String key, String action) throws Exception {
+    protected void Update_DB_Status(Connection conn, String key, String value) throws Exception {
         String sql = "UPDATE meta SET Tvalue = ? WHERE key = ?";
         PreparedStatement update = conn.prepareStatement(sql);
-        update.setString(1, key);
+        update.setString(1, value);
         update.setString(2, key);
         update.executeUpdate();
     }
