@@ -10,9 +10,9 @@ import javax.swing.table.*;
 public class GUI {
     
 // ===== CONFIG =====
-    private int PASSWORD_LENGTH = 8;
-    private String DATABASE_VER = "0";
-    private int CLIPBOARD_CLEAR_SEC = 60_000;
+    private static final int PASSWORD_LENGTH = 8;
+    private static final String DATABASE_VER = "0";
+    private static final int CLIPBOARD_CLEAR_SEC = 60_000;
 
 // ===== DEFAULT FIELDS ======
     public boolean DEBUG = false; //true or false, set to false before production
@@ -25,6 +25,7 @@ public class GUI {
     public boolean passwordGood = false;
     private ImageIcon dialogIcon = null;
     protected Backend backend = new Backend();
+    protected DatabaseUtilities databaseutilities = new DatabaseUtilities();
     private Connection conn;
     private JTable table;
     private DefaultTableModel model;
@@ -135,13 +136,13 @@ public class GUI {
         if (!isNew) {        
             // Then connect - Got to connect to the database, best part auto-magically
             conn = DriverManager.getConnection("jdbc:sqlite:" + vaultPath);
-            DATABASE_TYPE = backend.Pull_DB_Status(conn, "type");
+            DATABASE_TYPE = databaseutilities.Pull_DB_Status(conn, "type");
         }
 
         // ===== MASTER PASSWORD PROMPT =====
 
         // ======= HOOK for SHUTDOWN =======
-        Utilities.registerShutdownHook(isWindows);
+        DatabaseUtilities.registerShutdownHook(isWindows);
 
         if (isNew) {
             while (true) {
@@ -512,7 +513,7 @@ public class GUI {
         if (confirm == JOptionPane.YES_OPTION) {
             try {
                 int id = (int) model.getValueAt(row, 0);
-                backend.deleteEntry(conn, id);
+                databaseutilities.deleteEntry(conn, id);
 
                 credentials = backend.loadAll(conn);
                 refreshTable();
@@ -572,7 +573,7 @@ public class GUI {
             if (option == JOptionPane.OK_OPTION) {
                 if (!userField.equals(current_username)){
                 try {
-                    backend.userdelEntry(conn, userField.getText());
+                    databaseutilities.userdelEntry(conn, userField.getText());
 
                 } catch (Exception e) {
                     e.printStackTrace();
