@@ -94,6 +94,7 @@ public class Backend {
     }
 
     protected static void cleanupWipeDown() throws Exception {
+        System.out.println("Cleaning Backend");
         wipeByteArray(User_AES_Key);
         wipeByteArray(Vault_Use_Key);
         wipeByteArray(Vault_KEY);

@@ -1,7 +1,7 @@
-import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.util.concurrent.*;
+import javax.swing.*;
 
 //
 // Monitors user inactivity scoped to a specific JFrame and its contents.
@@ -30,19 +30,14 @@ public class IdleTimeoutManager {
     // Hold reference so we can cancel + reschedule on activity
     private ScheduledFuture<?> timeoutTask;
 
-    // Reference to master password for secure wipe on timeout
-    private final char[] masterPassword;
-
     // The parent frame — scopes all listeners and hosts the warning dialog
     private final JFrame parentFrame;
 
     /**
      * @param parentFrame    Main application window to scope listeners to
-     * @param masterPassword Sensitive credential — will be wiped on shutdown
      */
-    public IdleTimeoutManager(JFrame parentFrame, char[] masterPassword) {
+    public IdleTimeoutManager(JFrame parentFrame) {
         this.parentFrame = parentFrame;
-        this.masterPassword = masterPassword;
     }
 
     /**
@@ -179,11 +174,6 @@ public class IdleTimeoutManager {
      * Shutdown hook registered in main will also fire after System.exit().
      */
     private void performSecureShutdown() {
-        // SECURITY CRITICAL: Wipe master password before exit
-        // Safe to call twice — shutdown hook will zero it again, harmless
-        Backend.wipeCharArray(masterPassword);
-
-        System.out.println("[IdleTimeout] Secure wipe complete. Exiting.");
         System.exit(0); // Triggers registered shutdown hook
     }
 
