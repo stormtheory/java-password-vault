@@ -82,7 +82,7 @@ TAR_UP() {
 JAR(){
     # ===== Clean old build =====
     rm -f bin/* $JAR_FILENAME
-    rm -rf fatjar 
+    rm -rf fatjar
 
     # ===== Compile =====
     BUILD
@@ -92,13 +92,17 @@ JAR(){
     cp -r bin/* fatjar/
     cd fatjar && jar xf ../lib/$SQLITE_LIB && jar xf ../lib/$ARGON2_LIB && jar xf ../lib/$ARGON2_NOLIB && jar xf ../lib/$JNA_LIB && jar xf ../lib/$BOUNCY_HOUSE_LIB && cd ..
 
+    # ===== Strip signature files — required for signed JARs like Bouncy Castle =====
+    rm -f fatjar/META-INF/*.SF
+    rm -f fatjar/META-INF/*.RSA
+    rm -f fatjar/META-INF/*.DSA
+
     # ===== Write manifest =====
     mkdir -p fatjar/META-INF
     printf 'Manifest-Version: 1.0\nMain-Class: GUI\n\n' > fatjar/META-INF/MANIFEST.MF
 
     # ===== Package =====
     cd fatjar && jar cfm ../$JAR_FILENAME META-INF/MANIFEST.MF . && cd ..
-
     echo "#### Done #### run with: java -jar $JAR_FILENAME"
 }
 

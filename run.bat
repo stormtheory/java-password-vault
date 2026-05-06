@@ -239,17 +239,13 @@ goto :eof
 if exist bin\* del /q bin\*
 if exist %JAR_FILENAME% del /q %JAR_FILENAME%
 if exist fatjar rmdir /s /q fatjar
-
 :: Step 2 – compile (uses BUILD subroutine above)
 call :BUILD
-
 :: Step 3 – explode dependency jars into staging directory
 mkdir fatjar
 :: xcopy /e /i copies class tree from bin into fatjar
 xcopy /e /i bin fatjar >nul
-
-:: Explode only the jars bundled in the fat jar (no JNA native libs needed
-:: at explode time; they load dynamically via argon2-jvm at runtime)
+:: Explode only the jars bundled in the fat jar
 cd fatjar
 jar xf ..\lib\%SQLITE_LIB%
 jar xf ..\lib\%ARGON2_LIB%
@@ -257,23 +253,24 @@ jar xf ..\lib\%ARGON2_NOLIB%
 jar xf ..\lib\%JNA_LIB%
 jar xf ..\lib\%BOUNCY_HOUSE_LIB%
 cd ..
-
-:: Step 4 – write the manifest (trailing newline required by jar spec)
+:: Step 4 – strip Bouncy Castle signature files to prevent JAR verification failure
+if exist fatjar\META-INF\*.SF del /q fatjar\META-INF\*.SF
+if exist fatjar\META-INF\*.RSA del /q fatjar\META-INF\*.RSA
+if exist fatjar\META-INF\*.DSA del /q fatjar\META-INF\*.DSA
+:: Step 5 – write the manifest (trailing newline required by jar spec)
 mkdir fatjar\META-INF
 (
-    echo Manifest-Version: 1.0
-    echo Main-Class: GUI
-    echo.
+echo Manifest-Version: 1.0
+echo Main-Class: GUI
+echo.
 ) > fatjar\META-INF\MANIFEST.MF
-
-:: Step 5 – package into final fat jar
+:: Step 6 – package into final fat jar
 cd fatjar
 jar cfm ..\%JAR_FILENAME% META-INF\MANIFEST.MF .
 cd ..
-
 echo #### Done #### run with: java -jar %JAR_FILENAME%
 
-:: Step 6 – generate a .vbs launcher next to the jar
+:: Step 7 – generate a .vbs launcher next to the jar
 ::   javaw.exe (note the w) is Java's windowless variant — it launches
 ::   GUI apps with zero console window, exactly like double-clicking a
 ::   native .exe. The .vbs acts as a zero-install shim that invokes it.
@@ -281,7 +278,7 @@ echo #### Done #### run with: java -jar %JAR_FILENAME%
 ::   WScript.Shell.Run(..., 0, False) = hidden window, non-blocking.
 call :MAKE_LAUNCHER
 
-:: Step 7 – attempt to register .jar → javaw.exe file association
+:: Step 8 – attempt to register .jar → javaw.exe file association
 ::   Modern JDK (9+) no longer sets this automatically. Without it,
 ::   double-clicking a .jar does nothing or opens it as a zip.
 ::   ftype + assoc require elevation; we attempt silently and warn if
