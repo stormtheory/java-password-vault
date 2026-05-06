@@ -135,7 +135,7 @@ public class GUI {
     if (!isNew) {        
         // Then connect - Got to connect to the database, best part auto-magically
         conn = DriverManager.getConnection("jdbc:sqlite:" + vaultPath);
-        DATABASE_TYPE = backend.Pull_DB_Type(conn);
+        DATABASE_TYPE = backend.Pull_DB_Status(conn, "type");
     }
 
 // ===== MASTER PASSWORD PROMPT =====
@@ -147,6 +147,7 @@ public class GUI {
             try {
                 // SECURITY CRITICAL: Wipe master password from memory before JVM exits
                 // Prevents sensitive data staying in memory heap which mitigates memory dump attacks
+                Backend.cleanupWipeDown();
                 Backend.wipeCharArray(masterPassword);
 
                 // Using ProcessBuilder is safer than Runtime.exec() — avoids shell injection
@@ -234,6 +235,11 @@ public class GUI {
         );
         if (ok != JOptionPane.OK_OPTION) System.exit(0);
             masterPassword = pf1.getPassword();
+                DATABASE_TYPE = switch (DataBaseSelector.getSelectedIndex()) {
+                    case 0  -> "s";
+                    case 1  -> "m";
+                    default -> "s";
+                };
             if (DATABASE_TYPE.equals("m")) {username = usernameField.getText();}
             char[] p2 = pf2.getPassword();
 
@@ -263,12 +269,7 @@ public class GUI {
                     case 3  -> "PARANOID";
                     default -> "HIGH";
                 };
-                DATABASE_TYPE = switch (DataBaseSelector.getSelectedIndex()) {
-                    case 0  -> "s";
-                    case 1  -> "m";
-                    default -> "s";
-                };
-                
+                                
                 passwordGood = true;
                 break;
             }
@@ -293,9 +294,9 @@ public class GUI {
                     JOptionPane.OK_CANCEL_OPTION,
                     JOptionPane.PLAIN_MESSAGE
                 );
-                if (ok != JOptionPane.OK_OPTION) System.exit(0);
                 if (DATABASE_TYPE.equals("m")) {username = usernameField.getText();}
-            } else {
+                if (ok != JOptionPane.OK_OPTION) System.exit(0);} 
+                else {
                 Object[] msg = {
                 "Master Password:", pf
             };
@@ -311,7 +312,6 @@ public class GUI {
             masterPassword = pf.getPassword();
             passwordGood = true;
         }
-
         if (passwordGood) {
             if (masterPassword != null && masterPassword.length != 0) {          
                  
@@ -325,6 +325,7 @@ public class GUI {
                 
                 // ===== INIT BACKEND =====
                 // A salt is just random data added to a password before key derivation --- prevents Rainbow Table attacks
+                System.out.println(username);
                 backend.GetFiredUp(masterPassword, vault_salt, conn, username, DATABASE_TYPE);
 
                 // ===== LOAD DATA =====
@@ -495,7 +496,7 @@ public class GUI {
 
         if (option == JOptionPane.OK_OPTION) {
             try {
-                backend.addEntry(conn, tagField.getText().toCharArray(), userField.getText().toCharArray(), passField.getPassword());
+                backend.addEntry(conn, tagField.getText().toCharArray(), userField.getText().toCharArray(), passField.getPassword(), DATABASE_TYPE);
 
                 credentials = backend.loadAll(conn);
                 refreshTable();
