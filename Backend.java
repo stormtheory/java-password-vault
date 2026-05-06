@@ -49,17 +49,15 @@ public class Backend {
     protected void GetFiredUp(char[] masterPassword, byte[] vault_salt, Connection conn, String username, String type) throws Exception {
         System.out.println(username);
         int[] params = loadArgon2Params(conn, username);
-        User_AES_Key = deriveKey(masterPassword, params, username, conn);
+        user_salt = loadUserSalt(conn, username);
+        User_AES_Key = deriveKey(masterPassword, params, username, user_salt, conn);
         VK_STATUS = Pull_DB_Status(conn, "vk_status");
         if (type.equals("m")){
             if (VK_STATUS.equals("gen")){
                Vault_KEY = generateVaultKey();
 
                 // Wrap Vault Key with Argon2 generated key
-                Cipher cipher = Cipher.getInstance("AESWrapPad");
-                cipher.init(Cipher.WRAP_MODE, new SecretKeySpec(User_AES_Key, "AES"));
-                byte[] wrappedKey = cipher.wrap(new SecretKeySpec(Vault_KEY, "AES"));
-               
+                byte[] wrappedKey = wrapVaultKey(User_AES_Key);
                 // Save the wrapped key
                 try (PreparedStatement update = conn.prepareStatement(
                     "UPDATE users SET wrapped_vk = ? WHERE user_id = ?")) {
@@ -106,17 +104,16 @@ public class Backend {
         // Never use hardcoded constants at derive-time - who knows when the parameters may have been upgraded
         private int[] loadArgon2Params(Connection conn, String username) throws Exception {
             PreparedStatement ps = conn.prepareStatement(
-                "SELECT argon2_iter, argon2_mem, argon2_para, salt FROM users WHERE user_id = ?"
+                "SELECT argon2_iter, argon2_mem, argon2_para FROM users WHERE user_id = ?"
             );
             ps.setString(1, username);
             ResultSet rs = ps.executeQuery();
-                user_salt = rs.getBytes("salt");
             return new int[]{rs.getInt("argon2_iter"), rs.getInt("argon2_mem"), rs.getInt("argon2_para")};
         }
 
         private byte[] loadUserSalt(Connection conn, String username) throws Exception {
             PreparedStatement ps = conn.prepareStatement(
-                "SELECT argon2_iter, argon2_mem, argon2_para, salt FROM users WHERE user_id = ?"
+                "SELECT salt FROM users WHERE user_id = ?"
             );
             ps.setString(1, username);
             ResultSet rs = ps.executeQuery();
@@ -128,11 +125,13 @@ public class Backend {
         // Argon2id is memory-hard, makes brute force expensive even with GPUs
         // Argon2id hybrid variant, resistant to both GPU and side-channel attacks
         // Output raw bytes are used directly as the AES key — no PBKDF2 involvement anymore!
-        private byte[] deriveKey(char[] password, int[] params, String username, Connection conn) throws Exception {
+        private byte[] deriveKey(char[] password, int[] params, String username, byte[] u_salt, Connection conn) throws Exception {
             Argon2Advanced argon2 = (Argon2Advanced) Argon2Factory.createAdvanced(Argon2Types.ARGON2id);
 
+            user_salt = loadUserSalt(conn, username);
+
             // rawHash() returns raw bytes — exactly what AES needs as a key
-            byte[] keyBytes = argon2.rawHash(params[0], params[1], params[2], password, loadUserSalt(conn, username));
+            byte[] keyBytes = argon2.rawHash(params[0], params[1], params[2], password, u_salt);
 
             // Check to make sure key is 32 bytes, which is what AES-256 uses for a key
             if (keyBytes.length < 32) {
@@ -283,6 +282,61 @@ public class Backend {
         stmt.executeUpdate();
     }
 
+    private byte[] wrapVaultKey(byte[] new_User_AES_Key) throws Exception {
+        // Wrap Vault Key with Argon2 generated key
+            Cipher cipher = Cipher.getInstance("AESWrapPad");
+            cipher.init(Cipher.WRAP_MODE, new SecretKeySpec(new_User_AES_Key, "AES"));
+            return cipher.wrap(new SecretKeySpec(Vault_KEY, "AES"));
+    }
+
+    // ===== Uaser ADD =====  ---- Has to happen at some point?
+    protected void useraddEntry(Connection conn, String newUsername, char[] newPassword) throws Exception {
+        
+        ////////////////// Pull Level
+
+         // --- Or select dynamically based on context (e.g. user tier, data sensitivity) --
+        VaultLevel = "HIGH";
+        Argon2Profile.Profile profile = switch (VaultLevel) {
+            case "MINIMUM"  -> Argon2Profile.MINIMUM;
+            case "BALANCED"   -> Argon2Profile.BALANCED;
+            case "HIGH"     -> Argon2Profile.HIGH;
+            case "PARANOID"    -> Argon2Profile.PARANOID;
+            default -> throw new IllegalArgumentException("Unknown security profile: " + VaultLevel);
+        };
+            byte[] new_salt = new byte[SALT_SIZE];
+            new java.security.SecureRandom().nextBytes(new_salt);
+        
+            int[] params = {profile.iterations(), profile.memoryKb(), profile.parallelism()};
+            byte[] new_User_AES_Key = deriveKey(newPassword, params, newUsername, new_salt, conn);           
+            byte[] newWrappedKey = wrapVaultKey(new_User_AES_Key);
+
+        try (PreparedStatement insert = conn.prepareStatement(
+                "INSERT INTO users(user_id,role,wrapped_vk,salt,argon2_iter,argon2_mem,argon2_para) VALUES(?,?,?,?,?,?,?)")) {
+                insert.setString(1, newUsername);
+                insert.setString(2, "memeber");
+                insert.setBytes(3, newWrappedKey);
+                insert.setBytes(4, new_salt);
+                insert.setInt(5, profile.iterations());
+                insert.setInt(6, profile.memoryKb());
+                insert.setInt(7, profile.parallelism());
+                insert.addBatch();
+
+                insert.executeBatch();
+            }
+
+        wipeByteArray(new_User_AES_Key);
+        wipeByteArray(newWrappedKey);
+        wipeCharArray(newPassword);
+    }
+
+    // ===== User DELETE ===== ----- Yup
+    protected void userdelEntry(Connection conn, String user_id) throws Exception {
+        String sql = "DELETE FROM users WHERE user_id = ?";
+        PreparedStatement stmt = conn.prepareStatement(sql);
+        stmt.setString(1, user_id);
+        stmt.executeUpdate();
+    }
+
     // ===== UPDATE PASSWORD ===== --- I think this is obvious....
     // per item password update
     // Will need to update both Tag and Username as well
@@ -413,6 +467,11 @@ public class Backend {
                 // Database type identifier
                 insert.setString(1, "type");
                 insert.setString(2, type);
+                insert.addBatch();
+
+                // Database vault security level identifier
+                insert.setString(1, "vault_level");
+                insert.setString(2, VaultLevel);
                 insert.addBatch();
 
                 if (type.equals("m")) {

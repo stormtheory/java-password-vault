@@ -17,7 +17,7 @@ public class GUI {
 // ===== DEFAULT FIELDS ======
     public boolean DEBUG = false; //true or false, set to false before production
     
-    private String DATABASE_TYPE = "";
+    private static String DATABASE_TYPE = "";
     private String username = "single-user";
     protected String VaultLevel = "";
     public boolean isWindows = System.getProperty("os.name").toLowerCase().startsWith("windows");
@@ -242,26 +242,8 @@ public class GUI {
                 };
             if (DATABASE_TYPE.equals("m")) {username = usernameField.getText();}
             char[] p2 = pf2.getPassword();
-
-            if (!java.util.Arrays.equals(masterPassword, p2)) {
-                passwordGood = false;
-                JOptionPane.showMessageDialog(null, "Passwords do not match!");
-                Backend.wipeCharArray(masterPassword);
-                Backend.wipeCharArray(p2);
-            } else if (masterPassword.length == 0) {
-                // Password cannot be empty
-                JOptionPane.showMessageDialog(null, "Password cannot be empty!",
-                    "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
-                Backend.wipeCharArray(masterPassword);
-                Backend.wipeCharArray(p2);
-            } else if (masterPassword.length < PASSWORD_LENGTH) {
-                // Enforce minimum length
-                JOptionPane.showMessageDialog(null, "Password must be at least " + PASSWORD_LENGTH + " characters!",
-                    "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
-                Backend.wipeCharArray(masterPassword);
-                Backend.wipeCharArray(p2);
-            } else {
-                // All checks passed — map selected index to Argon2Profile
+            
+            // All checks passed — map selected index to Argon2Profile
                 VaultLevel = switch (profileSelector.getSelectedIndex()) {
                     case 0  -> "MINIMUM";
                     case 1  -> "BALANCED";
@@ -269,11 +251,10 @@ public class GUI {
                     case 3  -> "PARANOID";
                     default -> "HIGH";
                 };
-                                
-                passwordGood = true;
-                break;
-            }
+
+            passwordGood = testPasswordStrength( masterPassword , p2);                    
             Backend.wipeCharArray(p2);
+            if (passwordGood){break;}
         }
 
         } else {
@@ -392,12 +373,26 @@ public class GUI {
         JButton addBtn = new JButton("Add Entry");
         JButton delBtn = new JButton("Delete Selected");
 
+        JButton useraddBtn = new JButton("Add User");
+        JButton userdelBtn = new JButton("Delete User");
+
         addBtn.addActionListener(e -> addEntry());
         delBtn.addActionListener(e -> deleteEntry());
+        useraddBtn.addActionListener(e -> useraddEntry(username));
+        userdelBtn.addActionListener(e -> userdelEntry(username));
 
         JPanel panel = new JPanel();
+
         panel.add(addBtn);
         panel.add(delBtn);
+
+        if (DATABASE_TYPE.equals("m")) {
+            panel.add(useraddBtn);
+            panel.add(userdelBtn);
+        } else {
+            panel.add(useraddBtn).setVisible(false);
+            panel.add(userdelBtn).setVisible(false);
+        }
 
         frame.add(scroll, BorderLayout.CENTER);
         frame.add(panel, BorderLayout.SOUTH);
@@ -506,6 +501,34 @@ public class GUI {
         }
     }
 
+    protected boolean testPasswordStrength( char[] password, char[] p2){ 
+
+            if (!java.util.Arrays.equals(password, p2)) {
+                JOptionPane.showMessageDialog(null, "Passwords do not match!");
+                Backend.wipeCharArray(password);
+                Backend.wipeCharArray(p2);
+                return false;
+            } else if (masterPassword.length == 0) {
+                // Password cannot be empty
+                JOptionPane.showMessageDialog(null, "Password cannot be empty!",
+                    "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
+                Backend.wipeCharArray(masterPassword);
+                Backend.wipeCharArray(p2);
+                return false;
+            } else if (masterPassword.length < PASSWORD_LENGTH) {
+                // Enforce minimum length
+                JOptionPane.showMessageDialog(null, "Password must be at least " + PASSWORD_LENGTH + " characters!",
+                    "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
+                Backend.wipeCharArray(masterPassword);
+                Backend.wipeCharArray(p2);
+                return false;
+            } else {
+                Backend.wipeCharArray(password);
+                Backend.wipeCharArray(p2);
+                return true;
+            }
+        }
+
     // ===== DELETE ENTRY BUTTON =====
     private void deleteEntry() {
         int row = table.getSelectedRow();
@@ -525,6 +548,68 @@ public class GUI {
 
             } catch (Exception e) {
                 e.printStackTrace();
+            }
+        }
+    }
+
+        // ===== USERADD BUTTON =====
+    private void useraddEntry(String current_username) {
+        JTextField userField = new JTextField();
+        JPasswordField passField1 = new JPasswordField();
+        JPasswordField passField2 = new JPasswordField();
+
+        Object[] message = {
+                "New Username:", userField,
+                "Create Password:", passField1,
+                "Confirm Password:", passField2
+                // ROLE
+        };
+
+        // password checking
+
+        int option = JOptionPane.showConfirmDialog(null, message, "User Add",
+                JOptionPane.OK_CANCEL_OPTION);
+
+        
+        if (option == JOptionPane.OK_OPTION) {
+            if (!userField.equals(current_username)){
+                try {
+                    backend.useraddEntry(conn, userField.getText(), passField1.getPassword());
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    JOptionPane.showMessageDialog(null, "Failed to add: " + userField.getText(),
+                    "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
+                }
+                JOptionPane.showMessageDialog(null, userField.getText() + " added.",
+                    "Success", JOptionPane.INFORMATION_MESSAGE, dialogIcon);
+            }
+        }
+    }
+
+    // ===== USER DELETE BUTTON =====
+    private void userdelEntry(String current_username) { 
+        JTextField userField = new JTextField();
+        
+        Object[] message = {
+                "Username:", userField,
+        };
+
+            int option = JOptionPane.showConfirmDialog(null, message, "User Delete",
+                    JOptionPane.OK_CANCEL_OPTION);
+
+            if (option == JOptionPane.OK_OPTION) {
+                if (!userField.equals(current_username)){
+                try {
+                    backend.userdelEntry(conn, userField.getText());
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    JOptionPane.showMessageDialog(null, "Failed to delete: " + userField.getText(),
+                    "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
+                }
+                JOptionPane.showMessageDialog(null, userField.getText() + " deleted.",
+                    "Success", JOptionPane.INFORMATION_MESSAGE, dialogIcon);        
             }
         }
     }
