@@ -1,6 +1,7 @@
 import javax.crypto.spec.*;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import javax.security.auth.DestroyFailedException;
 import javax.crypto.KeyGenerator;
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
@@ -11,6 +12,11 @@ import de.mkammerer.argon2.Argon2Advanced;
 import de.mkammerer.argon2.Argon2Factory;
 import de.mkammerer.argon2.Argon2Factory.Argon2Types;
 
+import org.bouncycastle.crypto.engines.AESEngine;
+import org.bouncycastle.crypto.modes.GCMBlockCipher;
+import org.bouncycastle.crypto.params.AEADParameters;
+import org.bouncycastle.crypto.params.KeyParameter;
+
 public class Backend {
     public boolean DEBUG = false; //true or false set to false before production
 
@@ -20,9 +26,9 @@ public class Backend {
     private static final int IV_LENGTH = 12;
     private static final int SALT_SIZE = 32;
 
-    private static SecretKey User_AES_Key;
-    private static SecretKey Vault_KEY;
-    private static SecretKey Vault_Use_Key;
+    private static byte[] User_AES_Key;
+    private static byte[] Vault_KEY;
+    private static byte[] Vault_Use_Key;
     protected String VaultLevel = "";
     protected String VK_STATUS = "";
     //protected String username = "";
@@ -51,10 +57,8 @@ public class Backend {
 
                 // Wrap Vault Key with Argon2 generated key
                 Cipher cipher = Cipher.getInstance("AESWrapPad");
-                byte[] userkeyBytes = User_AES_Key.getEncoded();
-                byte[] vkBytes = Vault_KEY.getEncoded();
-                cipher.init(Cipher.WRAP_MODE, new SecretKeySpec(userkeyBytes, "AES"));
-                byte[] wrappedKey = cipher.wrap(new SecretKeySpec(vkBytes, "AES"));
+                cipher.init(Cipher.WRAP_MODE, new SecretKeySpec(User_AES_Key, "AES"));
+                byte[] wrappedKey = cipher.wrap(new SecretKeySpec(Vault_KEY, "AES"));
                
                 // Save the wrapped key
                 try (PreparedStatement update = conn.prepareStatement(
@@ -65,8 +69,6 @@ public class Backend {
                 }
                 Update_DB_Status(conn, "vk_status", "true");
                 wipeByteArray(wrappedKey);
-                wipeByteArray(userkeyBytes);
-                wipeByteArray(vkBytes);
             } 
             else if (VK_STATUS.equals("true")){
                 String sql = "SELECT wrapped_vk FROM users WHERE user_id = ?";
@@ -75,11 +77,12 @@ public class Backend {
                 ResultSet rs = stmt.executeQuery();
 
                 // Extract wrapped key bytes from result
-                byte[] userkeyBytes = User_AES_Key.getEncoded();
                 Cipher cipher = Cipher.getInstance("AESWrapPad");
-                cipher.init(Cipher.UNWRAP_MODE, new SecretKeySpec(userkeyBytes, "AES"));
-                Vault_KEY = (SecretKey) cipher.unwrap(rs.getBytes("wrapped_vk"), "AES", Cipher.SECRET_KEY);
-                wipeByteArray(userkeyBytes);
+                cipher.init(Cipher.UNWRAP_MODE, new SecretKeySpec(User_AES_Key, "AES"));
+                SecretKey tempKey = (SecretKey) cipher.unwrap(rs.getBytes("wrapped_vk"), "AES", Cipher.SECRET_KEY);
+                Vault_KEY = tempKey.getEncoded();
+                try { tempKey.destroy(); } catch (DestroyFailedException e) { /* expected */ }
+                wipeByteArray(User_AES_Key);
             }
         }
 
@@ -93,9 +96,9 @@ public class Backend {
     }
 
     protected static void cleanupWipeDown() throws Exception {
-        try {if (User_AES_Key != null) User_AES_Key.destroy();}catch (Exception t) { System.out.println(t); }
-        try {if (Vault_Use_Key != null) Vault_Use_Key.destroy();}catch (Exception g) { System.out.println(g); }
-        try {if (Vault_KEY != null) Vault_KEY.destroy();}catch (Exception r) { System.out.println(r); }
+        wipeByteArray(User_AES_Key);
+        wipeByteArray(Vault_Use_Key);
+        wipeByteArray(Vault_KEY);
     }
 
     // ===== LOAD ARGON2 PARAMETERS FROM DB =====
@@ -125,7 +128,7 @@ public class Backend {
         // Argon2id is memory-hard, makes brute force expensive even with GPUs
         // Argon2id hybrid variant, resistant to both GPU and side-channel attacks
         // Output raw bytes are used directly as the AES key — no PBKDF2 involvement anymore!
-        private SecretKey deriveKey(char[] password, int[] params, String username, Connection conn ) throws Exception {            
+        private byte[] deriveKey(char[] password, int[] params, String username, Connection conn) throws Exception {
             Argon2Advanced argon2 = (Argon2Advanced) Argon2Factory.createAdvanced(Argon2Types.ARGON2id);
 
             // rawHash() returns raw bytes — exactly what AES needs as a key
@@ -136,52 +139,74 @@ public class Backend {
                 throw new SecurityException("Derived key too short for AES-256");
             }
 
-            // Wrap raw bytes as AES key
-            SecretKey key = new SecretKeySpec(keyBytes, "AES");
-            
-            // Wipe raw key bytes from memory immediately after wrapping
-            wipeByteArray(keyBytes);
-
-            return key;
+            // Return raw bytes directly — caller must wipe with Arrays.fill after use
+            return keyBytes;
         }
 
-        private static SecretKey generateVaultKey() throws Exception {
+        private static byte[] generateVaultKey() throws Exception {
             // Initialize AES key generator with 256-bit key size
             KeyGenerator keyGen = KeyGenerator.getInstance("AES");
             keyGen.init(256, new java.security.SecureRandom());
-            // Generate raw AES-256 vault key
-            return keyGen.generateKey();   
-        }
+
+            // Extract raw bytes immediately — byte[] is wipeable unlike SecretKey
+            SecretKey key = keyGen.generateKey();
+            byte[] keyBytes = key.getEncoded();
+
+            // Best-effort wipe of the SecretKey — may fail on some JDKs
+            try { key.destroy(); } catch (DestroyFailedException e) { /* expected */ }
+
+            return keyBytes;
+}
 
 
     // ===== ENCRYPT ===== using AES256-GCM which AES is like a lock 🔒 and GCM is the tamper seal 🧾
     // 🔒 will encrypt whatever data you feed into it, then return the ecypted value
     // IV is a random value used during encryption so that the same input doesn’t produce the same hash output
     // Generated for us whenever new data cycle/set is saved
-    private byte[] encryptData(char[] plaintext, byte[] iv) throws Exception {
-        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
-        cipher.init(Cipher.ENCRYPT_MODE, Vault_Use_Key, spec);
-
-        byte[] data = new String(plaintext).getBytes(StandardCharsets.UTF_8);
-        byte[] encrypted_data = cipher.doFinal(data);
-
-        wipeByteArray(data);
-        return encrypted_data;
-    }
+            private byte[] encryptData(char[] plaintext, byte[] iv) throws Exception {
+            // Convert char[] to bytes so we can wipe after use
+            byte[] data = new String(plaintext).getBytes(StandardCharsets.UTF_8);
+            // KeyParameter holds raw key bytes — wipeable unlike SecretKey
+            KeyParameter keyParam = new KeyParameter(Vault_Use_Key);
+            // GCM mode — authenticated encryption, 128-bit tag
+            GCMBlockCipher cipher = new GCMBlockCipher(new AESEngine());
+            AEADParameters params = new AEADParameters(keyParam, GCM_TAG_LENGTH, iv);
+            cipher.init(true, params); // true = encrypt
+            // Allocate output buffer and process
+            byte[] encrypted_data = new byte[cipher.getOutputSize(data.length)];
+            int len = cipher.processBytes(data, 0, data.length, encrypted_data, 0);
+            cipher.doFinal(encrypted_data, len);
+            // Wipe sensitive byte arrays immediately after use
+            wipeByteArray(data);
+            Arrays.fill(keyParam.getKey(), (byte) 0);
+            return encrypted_data;
+        }
 
     // ===== DECRYPT (ON DEMAND ONLY) =====
-    protected char[] decryptData(byte[] encrypted_data, byte[] iv) throws Exception {
-        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
-        cipher.init(Cipher.DECRYPT_MODE, Vault_Use_Key, spec);
+            protected char[] decryptData(byte[] encrypted_data, byte[] iv) throws Exception {
 
-        byte[] decrypted_charset = cipher.doFinal(encrypted_data);
-        char[] plaintext = new String(decrypted_charset, StandardCharsets.UTF_8).toCharArray();
+            // KeyParameter holds raw key bytes — wipeable unlike SecretKey
+            KeyParameter keyParam = new KeyParameter(Vault_Use_Key);
 
-        wipeByteArray(decrypted_charset);
-        return plaintext;
-    }
+            // GCM mode — authenticated decryption, 128-bit tag
+            GCMBlockCipher cipher = new GCMBlockCipher(new AESEngine());
+            AEADParameters params = new AEADParameters(keyParam, GCM_TAG_LENGTH, iv);
+            cipher.init(false, params); // false = decrypt
+
+            // Allocate output buffer and process
+            byte[] decrypted_charset = new byte[cipher.getOutputSize(encrypted_data.length)];
+            int len = cipher.processBytes(encrypted_data, 0, encrypted_data.length, decrypted_charset, 0);
+            cipher.doFinal(decrypted_charset, len);
+
+            // Convert to char[] so we can wipe the byte[] after
+            char[] plaintext = new String(decrypted_charset, StandardCharsets.UTF_8).toCharArray();
+
+            // Wipe sensitive byte arrays immediately after use
+            wipeByteArray(decrypted_charset);
+            Arrays.fill(keyParam.getKey(), (byte) 0);
+
+            return plaintext;
+        }
 
     protected String Pull_DB_Status(Connection conn, String key) throws Exception {
         String sql = "SELECT Tvalue FROM meta WHERE key = ?";

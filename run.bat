@@ -18,8 +18,10 @@
 set ARGON2_LIB=argon2-jvm-2.12.jar
 set ARGON2_NOLIB=argon2-jvm-nolibs-2.12.jar
 set JNA_LIB=jna-5.18.1.jar
+set BOUNCY_HOUSE_LIB=bcprov-jdk18on-1.84.jar
 set SQLITE_LIB=sqlite-jdbc-3.53.0.0.jar
 set JAR_FILENAME=JavaPasswordVault.jar
+
 
 :: ── Change to the directory containing this script ───────────────────
 :: Equivalent to bash's: cd "$(dirname "$0")"
@@ -206,8 +208,8 @@ goto :eof
 :: Clean old class files before recompile
 if exist bin\* del /q bin\*
 
-echo javac -cp ".;lib\%SQLITE_LIB%;lib\%ARGON2_LIB%;lib\%ARGON2_NOLIB%;lib\%JNA_LIB%;bin" -d bin *.java
-javac -cp ".;lib\%SQLITE_LIB%;lib\%ARGON2_LIB%;lib\%ARGON2_NOLIB%;lib\%JNA_LIB%;bin" -d bin *.java
+echo javac -cp ".;lib\%SQLITE_LIB%;lib\%ARGON2_LIB%;lib\%ARGON2_NOLIB%;lib\%BOUNCY_HOUSE_LIB%;lib\%JNA_LIB%;bin" -d bin *.java
+javac -cp ".;lib\%SQLITE_LIB%;lib\%ARGON2_LIB%;lib\%ARGON2_NOLIB%;lib\%BOUNCY_HOUSE_LIB%;lib\%JNA_LIB%;bin" -d bin *.java
 goto :eof
 
 :: ====================================================================
@@ -217,8 +219,8 @@ goto :eof
 ::   -Dorg.sqlite.tmpdir=. keeps SQLite temp files local (portable).
 :: ====================================================================
 :RUN
-echo java --enable-native-access=ALL-UNNAMED -Dorg.sqlite.tmpdir=. -cp ".;lib\%SQLITE_LIB%;lib\%ARGON2_LIB%;lib\%ARGON2_NOLIB%;lib\%JNA_LIB%;bin" GUI
-java --enable-native-access=ALL-UNNAMED -Dorg.sqlite.tmpdir=. -cp ".;lib\%SQLITE_LIB%;lib\%ARGON2_LIB%;lib\%ARGON2_NOLIB%;lib\%JNA_LIB%;bin" GUI
+echo java --enable-native-access=ALL-UNNAMED -Dorg.sqlite.tmpdir=. -cp ".;lib\%SQLITE_LIB%;lib\%ARGON2_LIB%;lib\%ARGON2_NOLIB%;lib\%BOUNCY_HOUSE_LIB%;lib\%JNA_LIB%;bin" GUI
+java --enable-native-access=ALL-UNNAMED -Dorg.sqlite.tmpdir=. -cp ".;lib\%SQLITE_LIB%;lib\%ARGON2_LIB%;lib\%ARGON2_NOLIB%;lib\%BOUNCY_HOUSE_LIB%;lib\%JNA_LIB%;bin" GUI
 goto :eof
 
 :: ====================================================================
@@ -251,6 +253,9 @@ xcopy /e /i bin fatjar >nul
 cd fatjar
 jar xf ..\lib\%SQLITE_LIB%
 jar xf ..\lib\%ARGON2_LIB%
+jar xf ..\lib\%ARGON2_NOLIB%
+jar xf ..\lib\%JNA_LIB%
+jar xf ..\lib\%BOUNCY_HOUSE_LIB%
 cd ..
 
 :: Step 4 – write the manifest (trailing newline required by jar spec)

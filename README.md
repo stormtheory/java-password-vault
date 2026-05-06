@@ -40,7 +40,7 @@ This project is intended as a **learning-focused implementation** of a password 
 * **Encryption:** AES-256-GCM (confidentiality + integrity) (Post Quantum Resistant)
 * **Key Derivation:** Argon2id with random salt (stored in database) 
 * **Argon2id:** hybrid variant, resistant to both GPU and side-channel attacks (parameters stored in database)
-* **Password Handling:** Stored in `char[]`, wiped from memory after use
+* **Secret Handling:** All secrets are stored in RAM as a `byte[]` or `char[]`, wiped from memory after use or at graceful exit/close
 * **Per-entry IV:** Each username and password uses a unique random IV
 
 * **Master Password Prompt at start-up**
@@ -64,7 +64,8 @@ This project is intended as a **learning-focused implementation** of a password 
 * Tables:
 
   * `vault`: stores encrypted (tag, username, password), and IV
-  * `meta`: stores salt, encrypted vault username, and future metadata
+  * `users`: stores username, role, wrapped_vk(multi-user), user_salt, argon2_parmeters
+  * `meta`: stores vault_salt, database_version, database_type, and future metadata
 
 Tags, Usernames, and Passwords are stored as encrypted binary blobs.
 
@@ -84,6 +85,7 @@ Tags, Usernames, and Passwords are stored as encrypted binary blobs.
 
   * `sqlite-jdbc-3.53.0.0.jar`
   * `argon2-jvm-2.12.jar`
+  * `bcprov-jdk18on-1.84.jar`
 
 No external database or installer required.
 
@@ -91,7 +93,7 @@ No external database or installer required.
 
 ## ⚠️ Limitations
 
-* Memory may not be fully cleared, always a risk, but data is always encrypted on disk. (Work around: turn off swap space)(Reboot/Shutdown of your machine clears the memory)
+* Memory may not be fully cleared, always a risk, but data is always encrypted on disk. (Work around: turn off use of swap space)(Reboot/Shutdown of your machine clears the memory)
 * Will not save you from keyloggers or other kinds of malware but will keep the data safe if the vault is closed.
 
 ---
@@ -141,6 +143,7 @@ No external database or installer required.
           IdleTimeoutManager.java
           lib/sqlite-jdbc-3.53.0.0.jar
           lib/argon2-jvm-2.12.jar
+          lib/bcprov-jdk18on-1.84.jar
           bin/
           icons/
 
@@ -214,6 +217,7 @@ No external database or installer required.
       In NetBeans:
          Right-click `Libraries` >> Click `Add JAR/Folder` >> Select:`sqlite-jdbc-3.53.0.0.jar`
          Right-click `Libraries` >> Click `Add JAR/Folder` >> Select:`argon2-jvm-2.12.jar`
+         Right-click `Libraries` >> Click `Add JAR/Folder` >> Select:`bcprov-jdk18on-1.84.jar`
 
    4. May need to add:
       Add JVM option in NetBeans
