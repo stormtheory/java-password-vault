@@ -49,7 +49,9 @@ This project is intended as a **learning-focused implementation** of a password 
 * **On-demand Decryption:** Passwords are only decrypted when requested to copy or show
 * **No Master Password Storage:** Master password is never saved
 * **All data is encrypted:** Using AES256-GCM which is Post Quantum Resistant
+* **Password Generator**
 
+* **Multi-User** not just one user can login and use the vault (Shared encryption key) (Good for legacy accounts or small business)
 * **Cross-platform support (Windows / Linux / macOS)** Java is cross-platform compatible and this project is devoted to keeping it that way.
 * **Standalone compiled .jar executable**
 
@@ -100,13 +102,9 @@ No external database or installer required.
 
 ## 🚀 Future Improvements
 
-**[ Major Upgrades ]**
-* Multi-User account option (Shared encryption key) (Good for legacy accounts or small business)
-
 **[ New Features ]**
 * Changing Master Password
 * Search/filter functionality
-* Password Generator
 * Passphrase Generator
 * Password Changing
 

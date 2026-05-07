@@ -1,8 +1,9 @@
 import javax.crypto.spec.*;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.security.Security;
+
 import javax.security.auth.DestroyFailedException;
-import javax.crypto.KeyGenerator;
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
 import java.sql.*;
@@ -16,6 +17,7 @@ import org.bouncycastle.crypto.engines.AESEngine;
 import org.bouncycastle.crypto.modes.GCMBlockCipher;
 import org.bouncycastle.crypto.params.AEADParameters;
 import org.bouncycastle.crypto.params.KeyParameter;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 public class Backend {
     public boolean DEBUG = false; //true or false set to false before production
@@ -49,14 +51,19 @@ public class Backend {
     // A salt is just random data added to a password before key derivation --- prevents Rainbow Table attacks
     protected void GetFiredUp(char[] masterPassword, byte[] vault_salt, Connection conn, String username, String type) throws Exception {
         System.out.println(username);
+        System.out.println("masterPassword empty? " + (masterPassword == null || masterPassword.length == 0 || masterPassword[0] == '\0'));
+        Security.addProvider(new BouncyCastleProvider());
         int[] params = loadArgon2Params(conn, username);
         user_salt = loadUserSalt(conn, username);
         User_AES_Key = deriveKey(masterPassword, params, username, user_salt, conn);
         VK_STATUS = databaseutilities.Pull_DB_Status(conn, "vk_status");
+                                                                
         if (type.equals("m")){
+                                                                     
             if (VK_STATUS.equals("gen")){
+                                                                    
                Vault_KEY = generateVaultKey();
-
+                                
                 // Wrap Vault Key with Argon2 generated key
                 byte[] wrappedKey = wrapVaultKey(User_AES_Key);
                 // Save the wrapped key
@@ -130,8 +137,6 @@ public class Backend {
         private byte[] deriveKey(char[] password, int[] params, String username, byte[] u_salt, Connection conn) throws Exception {
             Argon2Advanced argon2 = (Argon2Advanced) Argon2Factory.createAdvanced(Argon2Types.ARGON2id);
 
-            user_salt = loadUserSalt(conn, username);
-
             // rawHash() returns raw bytes — exactly what AES needs as a key
             byte[] keyBytes = argon2.rawHash(params[0], params[1], params[2], password, u_salt);
 
@@ -145,19 +150,17 @@ public class Backend {
         }
 
         private static byte[] generateVaultKey() throws Exception {
-            // Initialize AES key generator with 256-bit key size
-            KeyGenerator keyGen = KeyGenerator.getInstance("AES");
-            keyGen.init(256, new java.security.SecureRandom());
+            // Explicitly request BouncyCastle's SecureRandom — avoids JDK default provider
+            // Requires BouncyCastleProvider to be registered at app startup
+            SecureRandom random = SecureRandom.getInstance("DEFAULT", "BC");
 
-            // Extract raw bytes immediately — byte[] is wipeable unlike SecretKey
-            SecretKey key = keyGen.generateKey();
-            byte[] keyBytes = key.getEncoded();
-
-            // Best-effort wipe of the SecretKey — may fail on some JDKs
-            try { key.destroy(); } catch (DestroyFailedException e) { /* expected */ }
+            // Generate 256-bit (32 byte) AES key directly into a byte[]
+            // No SecretKey wrapper — byte[] is fully wipeable with Arrays.fill() after use
+            byte[] keyBytes = new byte[32];
+            random.nextBytes(keyBytes);
 
             return keyBytes;
-}
+        }
 
 
     // ===== ENCRYPT ===== using AES256-GCM which AES is like a lock 🔒 and GCM is the tamper seal 🧾
@@ -231,41 +234,44 @@ public class Backend {
     }
 
     // ===== ADD ENTRY =====  ---- Has to happen at some point?
-    protected void addEntry(Connection conn, char[] tag, char[] username, char[] password, String type) throws Exception {
+    protected void addEntry(Connection conn, char[] tag, char[] username, char[] password, char [] notes, String type) throws Exception {
         byte[] iv = generateIV();
         
         byte[] encrypted_tag = encryptData(tag, iv);
         byte[] encrypted_username = encryptData(username, iv);
         byte[] encrypted_pass = encryptData(password, iv);
+        byte[] encrypted_notes = encryptData(notes, iv);
         
-        String sql = "INSERT INTO vault(tag, username, password, iv) VALUES (?, ?, ?, ?)";
+        String sql = "INSERT INTO vault(tag, username, password, notes, iv) VALUES (?, ?, ?, ?, ?)";
         PreparedStatement stmt = conn.prepareStatement(sql);
 
         stmt.setBytes(1, encrypted_tag);
         stmt.setBytes(2, encrypted_username);
         stmt.setBytes(3, encrypted_pass);
-        stmt.setBytes(4, iv);
+        stmt.setBytes(4, encrypted_notes);
+        stmt.setBytes(5, iv);
 
         stmt.executeUpdate();
 
         wipeCharArray(username);
-        wipeByteArray(encrypted_username);
-
         wipeCharArray(tag);
-        wipeByteArray(encrypted_tag);
-
         wipeCharArray(password);
+        wipeCharArray(notes);
+        
+        wipeByteArray(encrypted_username);
+        wipeByteArray(encrypted_tag);
         wipeByteArray(encrypted_pass);
+        wipeByteArray(encrypted_notes);
     }
 
     private byte[] wrapVaultKey(byte[] new_User_AES_Key) throws Exception {
         // Wrap Vault Key with Argon2 generated key
             Cipher cipher = Cipher.getInstance("AESWrapPad");
             cipher.init(Cipher.WRAP_MODE, new SecretKeySpec(new_User_AES_Key, "AES"));
-            return cipher.wrap(new SecretKeySpec(Vault_KEY, "AES"));
+            return cipher.wrap(new SecretKeySpec(Vault_KEY, "AES"));//// Has to Vault_Key becuase of where the Logic is in FireUp
     }
 
-    // ===== Uaser ADD =====  ---- Has to happen at some point?
+    // ===== User ADD =====  ---- Has to happen at some point?
     protected void useraddEntry(Connection conn, String newUsername, char[] newPassword) throws Exception {
         
         ////////////////// Pull Level
