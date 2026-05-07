@@ -3,6 +3,7 @@ import java.awt.event.ItemEvent;
 import java.io.File;
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import javax.swing.*;
 import javax.swing.table.*;
@@ -53,7 +54,6 @@ public class GUI {
 
         SwingUtilities.invokeLater(() -> {
             try {
-                //System.out.println(System.getProperty("java.class.path"));
                 new GUI().start();
             } catch (Exception e) {
                 e.printStackTrace();
@@ -223,11 +223,10 @@ public class GUI {
                     default -> "HIGH";
                 };
 
-            passwordGood = testPasswordStrength( masterPassword , p2);                    
+            passwordGood = testPasswordStrength( masterPassword , p2);
             Backend.wipeCharArray(p2);
             if (passwordGood){break;}
         }
-
         } else {
         // ===== AT STARTUP ===================================================
             JPasswordField pf = new JPasswordField();
@@ -265,13 +264,11 @@ public class GUI {
             passwordGood = true;
         }
         if (passwordGood) {
-            if (masterPassword != null && masterPassword.length != 0) {          
-                 
+            if (masterPassword != null && masterPassword.length != 0) {
                 if (isNew) {
                     conn = DriverManager.getConnection("jdbc:sqlite:" + vaultPath);
                     backend.BuildDatabase(conn, username, DATABASE_VER, DATABASE_TYPE, VaultLevel);
                 }
-
                 // ===== GET SALT ===== #### Pulled from vault.db radom to each vault
                 byte[] vault_salt = backend.getOrCreateVaultSalt(conn);
                 
@@ -449,24 +446,62 @@ public class GUI {
     private void addEntry() {
         JTextField tagField = new JTextField();
         JTextField userField = new JTextField();
+        JTextField noteField = new JTextField();
         JPasswordField passField = new JPasswordField();
 
+        // ========= Password visibility toggle =============================
+        JCheckBox showPass = new JCheckBox("Show");
+        showPass.addActionListener(e ->
+            passField.setEchoChar(showPass.isSelected() ? (char) 0 : '•')
+        );
+
+        // ====== Generator options =================================
+        JCheckBox useABC     = new JCheckBox("ABC", true);
+        JCheckBox useNumbers = new JCheckBox("123", true);
+        JCheckBox useSpecial = new JCheckBox("!@#", false);
+        SpinnerNumberModel lenNumModel = new SpinnerNumberModel(18, 8, 66, 1);
+        JSpinner lenNumSpinner = new JSpinner(lenNumModel);
+        lenNumSpinner.setPreferredSize(new Dimension(55, 24));
+
+        // ====== Generator options row ===========================================
+        JPanel genOptions = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        genOptions.add(new JLabel("Len:"));
+        genOptions.add(lenNumSpinner);
+        genOptions.add(useABC);
+        genOptions.add(useNumbers);
+        genOptions.add(useSpecial);
+
+        // ======= Gen button =============
+        JButton genBtn = new JButton("Generate");
+        genBtn.addActionListener(e -> {
+            int length = (int) lenNumSpinner.getValue();
+            char[] generated = DatabaseUtilities.generatePassword(length,useABC.isSelected(),useNumbers.isSelected(),useSpecial.isSelected());
+            passField.setText(new String(generated));
+            Arrays.fill(generated, '\0'); // zero out
+        });
+
+        // ========== Row: password field + show checkbox =============================
+        JPanel passRow = new JPanel(new BorderLayout(4, 0));
+        passRow.add(passField, BorderLayout.CENTER);
+        passRow.add(showPass,  BorderLayout.EAST);
+
         Object[] message = {
-                "Tag/URL:", tagField,
-                "Username:", userField,
-                "Password:", passField
+            "Tag/URL:",   tagField,
+            "Username:",  userField,
+            "Password:",  passRow,
+            genOptions,
+            genBtn,
+            "Notes:", noteField
         };
 
         int option = JOptionPane.showConfirmDialog(null, message, "Add Entry",
-                JOptionPane.OK_CANCEL_OPTION);
+            JOptionPane.OK_CANCEL_OPTION);
 
         if (option == JOptionPane.OK_OPTION) {
             try {
-                backend.addEntry(conn, tagField.getText().toCharArray(), userField.getText().toCharArray(), passField.getPassword(), DATABASE_TYPE);
-
+                backend.addEntry(conn, tagField.getText().toCharArray(), userField.getText().toCharArray(), passField.getPassword(), noteField.getText().toCharArray(), DATABASE_TYPE);
                 credentials = backend.loadAll(conn);
                 refreshTable();
-
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -495,7 +530,7 @@ public class GUI {
                 Backend.wipeCharArray(p2);
                 return false;
             } else {
-                Backend.wipeCharArray(password);
+                /// Can not wipe Passsword here
                 Backend.wipeCharArray(p2);
                 return true;
             }
@@ -535,27 +570,25 @@ public class GUI {
                 "Create Password:", passField1,
                 "Confirm Password:", passField2
                 // ROLE
-        };
-
-        // password checking
-
+        };  
         int option = JOptionPane.showConfirmDialog(null, message, "User Add",
                 JOptionPane.OK_CANCEL_OPTION);
 
         
         if (option == JOptionPane.OK_OPTION) {
-            if (!userField.equals(current_username)){
-                try {
-                    backend.useraddEntry(conn, userField.getText(), passField1.getPassword());
-
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    JOptionPane.showMessageDialog(null, "Failed to add: " + userField.getText(),
-                    "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
+            boolean newPasswordGood = testPasswordStrength(passField1.getPassword(), passField2.getPassword());
+            if (newPasswordGood){
+                if (!userField.equals(current_username)){
+                    try {
+                        backend.useraddEntry(conn, userField.getText(), passField1.getPassword());
+                        JOptionPane.showMessageDialog(null, userField.getText() + " added.","Success", JOptionPane.INFORMATION_MESSAGE, dialogIcon);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        JOptionPane.showMessageDialog(null, "Failed to add: " + userField.getText(),
+                        "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
+                    }
                 }
-                JOptionPane.showMessageDialog(null, userField.getText() + " added.",
-                    "Success", JOptionPane.INFORMATION_MESSAGE, dialogIcon);
-            }
+            } 
         }
     }
 
@@ -574,14 +607,12 @@ public class GUI {
                 if (!userField.equals(current_username)){
                 try {
                     databaseutilities.userdelEntry(conn, userField.getText());
-
+                    JOptionPane.showMessageDialog(null, userField.getText() + " deleted.","Success", JOptionPane.INFORMATION_MESSAGE, dialogIcon);
                 } catch (Exception e) {
                     e.printStackTrace();
                     JOptionPane.showMessageDialog(null, "Failed to delete: " + userField.getText(),
                     "Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
-                }
-                JOptionPane.showMessageDialog(null, userField.getText() + " deleted.",
-                    "Success", JOptionPane.INFORMATION_MESSAGE, dialogIcon);        
+                }      
             }
         }
     }

@@ -1,3 +1,4 @@
+import java.security.SecureRandom;
 import java.sql.*;
 
 public class DatabaseUtilities 
@@ -59,5 +60,23 @@ public class DatabaseUtilities
         PreparedStatement stmt = conn.prepareStatement(sql);
         stmt.setString(1, user_id);
         stmt.executeUpdate();
+    }
+
+    public static char[] generatePassword(int length, boolean useABC, boolean use123, boolean useSpec) {
+        // Build the character pool from enabled sets
+        // Simple password generator
+        String chars = "";
+        if (useABC)  chars += "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+        if (use123)  chars += "0123456789";
+        if (useSpec) chars += "!@#$%^*()-_=+[]:.?";
+
+        if (chars.isEmpty()) chars = "abcdefghijklmnopqrstuvwxyz";
+
+        SecureRandom random = new SecureRandom();
+        char[] password = new char[length];
+        for (int i = 0; i < length; i++) {
+            password[i] = chars.charAt(random.nextInt(chars.length()));
+        }
+        return password;
     }
 }
