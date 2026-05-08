@@ -222,6 +222,9 @@ public class GUI {
         // ===== BUILD UI =====
         // If we build it, they will come...
         JFrame frame = new JFrame("Password Vault");
+        if (DATABASE_TYPE.equals("m")){
+            frame.setTitle("Password Vault:   " + username);
+        }
         frame.setSize(600, 400);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
@@ -442,12 +445,6 @@ public class GUI {
                 JOptionPane.showMessageDialog(null, "Failed to change " + username + " account password","Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
                 }
                 Backend.wipeCharArray(masterPassword);
-                // push to backend
-                //param
-                //devkey
-                // wrap key
-                // put back key and new salt in database
-
             }
         }
 
