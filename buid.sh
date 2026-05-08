@@ -42,11 +42,12 @@ show_help() {
 Usage: $(basename "$0") [OPTIONS]
 
 Options:
-  -d             Copy the tar to the downloads directory
+  -c             Copy the tar to the downloads directory
   -i             Runs the build function
   -b             Runs the build function
   -r             Starts the GUI program
   -j             Create Jar file
+  -d             debug
 
   -h             Show this help message
 
@@ -109,7 +110,13 @@ JAR(){
 BUILD() {
         rm -f ./bin/*
         echo "javac -cp \".:lib/$SQLITE_LIB:lib/$ARGON2_LIB:lib/$ARGON2_NOLIB:lib/$BOUNCY_HOUSE_LIB:lib/$JNA_LIB:bin\" -d bin *.java"
-        javac -cp ".:lib/$SQLITE_LIB:lib/$ARGON2_LIB:lib/$ARGON2_NOLIB:lib/$BOUNCY_HOUSE_LIB:lib/$JNA_LIB:bin" -d bin *.java
+        
+        if [ "$DEBUG" != true ];then
+          javac -cp ".:lib/$SQLITE_LIB:lib/$ARGON2_LIB:lib/$ARGON2_NOLIB:lib/$BOUNCY_HOUSE_LIB:lib/$JNA_LIB:bin" -d bin *.java
+        else
+          javac -Xlint:deprecation -cp ".:lib/$SQLITE_LIB:lib/$ARGON2_LIB:lib/$ARGON2_NOLIB:lib/$BOUNCY_HOUSE_LIB:lib/$JNA_LIB:bin" -d bin *.java
+        
+        fi
 }
 
 RUN(){
@@ -117,11 +124,12 @@ RUN(){
       java --enable-native-access=ALL-UNNAMED -Dorg.sqlite.tmpdir=. -cp ".:lib/$SQLITE_LIB:lib/$ARGON2_LIB:lib/$ARGON2_NOLIB:lib/$BOUNCY_HOUSE_LIB:lib/$JNA_LIB:bin" GUI
 }
 
+DEBUG=false
 HELP=true
 # 🔍 Parse options
-while getopts ":ijdbrh" opt; do
+while getopts ":ijdcbrh" opt; do
   case ${opt} in
-    d)
+    c)
         TAR_UP=true
         DOWNLOADS=true
         HELP=false
@@ -140,6 +148,8 @@ while getopts ":ijdbrh" opt; do
         ;;
     r)  RUN=true
         HELP=false
+        ;;
+    d)  DEBUG=true
         ;;
     h)
       show_help

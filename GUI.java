@@ -144,89 +144,9 @@ public class GUI {
         // ======= HOOK for SHUTDOWN =======
         DatabaseUtilities.registerShutdownHook(isWindows);
 
+        // ===== Create New Vault =============================================
         if (isNew) {
-            while (true) {
-            // ===== CREATE PASSWORD =====
-        // If no vault.db — prompt for password and vault type
-        JPasswordField pf1      = new JPasswordField(20);
-        JPasswordField pf2      = new JPasswordField(20);
-        JTextField     usernameField = new JTextField(20);
-        JLabel         more_space   = new JLabel(" ");
-        JLabel         more_space1   = new JLabel(" ");
-        JLabel         more_space2   = new JLabel(" ");
-        JLabel         ufl_spacer   = new JLabel(" ");
-        JLabel         uf_spacer   = new JLabel(" ");
-        JLabel         usernameLabel = new JLabel("Username:");
-
-        usernameField.setVisible(false);
-        usernameLabel.setVisible(false);
-
-        JComboBox<String> DataBaseSelector = new JComboBox<>(new String[]{
-            "Single User - One password, One key",
-            "Multi-User  - Many usernames/passwords, One key"
-        });
-        DataBaseSelector.setSelectedIndex(0);
-
-        JComboBox<String> profileSelector = new JComboBox<>(new String[]{
-            "Minimum  - Low risk, high throughput (OWASP 2023)",
-            "Balanced - Most applications (RFC 9106)",
-            "High     - Sensitive credentials (RFC 9106)",
-            "Paranoid - Vault/master-key grade"
-        });
-        profileSelector.setSelectedIndex(2);
-
-        // Show/hide username field when vault type changes
-        DataBaseSelector.addItemListener(e -> {
-            if (e.getStateChange() == ItemEvent.SELECTED) {
-                boolean multi = DataBaseSelector.getSelectedIndex() == 1;
-                usernameLabel.setVisible(multi);
-                ufl_spacer.setVisible(!multi);
-                usernameField.setVisible(multi);
-                uf_spacer.setVisible(!multi);
-            }
-        });
-
-        Object[] msg = {
-            more_space1, more_space1,
-                ufl_spacer,ufl_spacer,
-            "Type of Vault:",          DataBaseSelector,
-            more_space2, more_space2,
-                usernameLabel, usernameField,
-            "Create Master Password:", pf1,
-            "Confirm Password:",       pf2,
-            more_space, more_space,
-            "Security Profile:",       profileSelector,
-                uf_spacer, uf_spacer
-        };
-
-        int ok = JOptionPane.showConfirmDialog(
-            null, msg, "Create Vault",
-            JOptionPane.OK_CANCEL_OPTION,
-            JOptionPane.PLAIN_MESSAGE
-        );
-        if (ok != JOptionPane.OK_OPTION) System.exit(0);
-            masterPassword = pf1.getPassword();
-                DATABASE_TYPE = switch (DataBaseSelector.getSelectedIndex()) {
-                    case 0  -> "s";
-                    case 1  -> "m";
-                    default -> "s";
-                };
-            if (DATABASE_TYPE.equals("m")) {username = usernameField.getText();}
-            char[] p2 = pf2.getPassword();
-            
-            // All checks passed — map selected index to Argon2Profile
-                VaultLevel = switch (profileSelector.getSelectedIndex()) {
-                    case 0  -> "MINIMUM";
-                    case 1  -> "BALANCED";
-                    case 2  -> "HIGH";
-                    case 3  -> "PARANOID";
-                    default -> "HIGH";
-                };
-
-            passwordGood = testPasswordStrength( masterPassword , p2);
-            Backend.wipeCharArray(p2);
-            if (passwordGood){break;}
-        }
+            passwordGood = createNewMasterPass(true);
         } else {
         // ===== AT STARTUP ===================================================
             JPasswordField pf = new JPasswordField();
@@ -341,12 +261,14 @@ public class GUI {
         // ===== BUTTONS =====
         JButton addBtn = new JButton("Add Entry");
         JButton delBtn = new JButton("Delete Selected");
-
+        JButton changeMasterPassBtn = new JButton("Account Password: " + username);
         JButton useraddBtn = new JButton("Add User");
         JButton userdelBtn = new JButton("Delete User");
+        
 
         addBtn.addActionListener(e -> addEntry());
         delBtn.addActionListener(e -> deleteEntry());
+        changeMasterPassBtn.addActionListener(e -> changeMasterPass(username));
         useraddBtn.addActionListener(e -> useraddEntry(username));
         userdelBtn.addActionListener(e -> userdelEntry(username));
 
@@ -354,7 +276,7 @@ public class GUI {
 
         panel.add(addBtn);
         panel.add(delBtn);
-
+        panel.add(changeMasterPassBtn);
         if (DATABASE_TYPE.equals("m")) {
             panel.add(useraddBtn);
             panel.add(userdelBtn);
@@ -508,6 +430,27 @@ public class GUI {
         }
     }
 
+    private void changeMasterPass(String username)
+        {
+            passwordGood = createNewMasterPass(false);
+            if (passwordGood){
+                try {
+                backend.changeMasterPass(conn, masterPassword,username);
+                JOptionPane.showMessageDialog(null, "Changed " + username + " account password","Success", JOptionPane.INFORMATION_MESSAGE, dialogIcon);
+                } catch (Exception e) {
+                e.printStackTrace();
+                JOptionPane.showMessageDialog(null, "Failed to change " + username + " account password","Error", JOptionPane.ERROR_MESSAGE, dialogIcon);
+                }
+                Backend.wipeCharArray(masterPassword);
+                // push to backend
+                //param
+                //devkey
+                // wrap key
+                // put back key and new salt in database
+
+            }
+        }
+
     protected boolean testPasswordStrength( char[] password, char[] p2){ 
 
             if (!java.util.Arrays.equals(password, p2)) {
@@ -535,6 +478,102 @@ public class GUI {
                 return true;
             }
         }
+
+    protected boolean createNewMasterPass(boolean createVault){
+        int ok;
+        while (true) {
+            // ===== CREATE PASSWORD =====
+        // If no vault.db — prompt for password and vault type
+        JPasswordField pf1      = new JPasswordField(20);
+        JPasswordField pf2      = new JPasswordField(20);
+        JTextField     usernameField = new JTextField(20);
+        JLabel         more_space   = new JLabel(" ");
+        JLabel         more_space1   = new JLabel(" ");
+        JLabel         more_space2   = new JLabel(" ");
+        JLabel         ufl_spacer   = new JLabel(" ");
+        JLabel         uf_spacer   = new JLabel(" ");
+        JLabel         usernameLabel = new JLabel("Username:");
+        JLabel         type_of_vault_label = new JLabel("Type of Vault:");
+
+        usernameField.setVisible(false);
+        usernameLabel.setVisible(false);
+
+        JComboBox<String> DataBaseSelector = new JComboBox<>(new String[]{
+            "Single User - One password, One key",
+            "Multi-User  - Many usernames/passwords, One key"
+        });
+        DataBaseSelector.setSelectedIndex(0);
+
+        JComboBox<String> profileSelector = new JComboBox<>(new String[]{
+            "Minimum  - Low risk, high throughput (OWASP 2023)",
+            "Balanced - Most applications (RFC 9106)",
+            "High     - Sensitive credentials (RFC 9106)",
+            "Paranoid - Vault/master-key grade"
+        });
+        profileSelector.setSelectedIndex(2);
+
+        // Show/hide username field when vault type changes
+        type_of_vault_label.setVisible(createVault);
+        DataBaseSelector.setVisible(createVault);
+        DataBaseSelector.addItemListener(e -> {
+            if (e.getStateChange() == ItemEvent.SELECTED) {
+                boolean multi = DataBaseSelector.getSelectedIndex() == 1;
+                usernameLabel.setVisible(multi);
+                ufl_spacer.setVisible(!multi);
+                usernameField.setVisible(multi);
+                uf_spacer.setVisible(!multi);
+            }
+        });
+
+        Object[] msg = {
+            more_space1, more_space1,
+                ufl_spacer,ufl_spacer,
+            type_of_vault_label,          DataBaseSelector,
+            more_space2, more_space2,
+                usernameLabel, usernameField,
+            "Create Master Password:", pf1,
+            "Confirm Password:",       pf2,
+            more_space, more_space,
+            "Security Profile:",       profileSelector,
+                uf_spacer, uf_spacer
+        };
+
+        if (createVault){
+        ok = JOptionPane.showConfirmDialog(
+            null, msg, "Create Vault",
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.PLAIN_MESSAGE
+        );} else {
+        ok = JOptionPane.showConfirmDialog(
+            null, msg, "Update Account Password",
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.PLAIN_MESSAGE
+        );}
+
+        if (ok != JOptionPane.OK_OPTION) System.exit(0);
+            masterPassword = pf1.getPassword();
+                DATABASE_TYPE = switch (DataBaseSelector.getSelectedIndex()) {
+                    case 0  -> "s";
+                    case 1  -> "m";
+                    default -> "s";
+                };
+            if (DATABASE_TYPE.equals("m")) {username = usernameField.getText();}
+            char[] p2 = pf2.getPassword();
+            
+            // All checks passed — map selected index to Argon2Profile
+                VaultLevel = switch (profileSelector.getSelectedIndex()) {
+                    case 0  -> "MINIMUM";
+                    case 1  -> "BALANCED";
+                    case 2  -> "HIGH";
+                    case 3  -> "PARANOID";
+                    default -> "HIGH";
+                };
+
+            passwordGood = testPasswordStrength( masterPassword , p2);
+            Backend.wipeCharArray(p2);
+            if (passwordGood){return true;}
+        }
+    }
 
     // ===== DELETE ENTRY BUTTON =====
     private void deleteEntry() {

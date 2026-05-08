@@ -4,6 +4,7 @@ import java.security.SecureRandom;
 import java.security.Security;
 
 import javax.security.auth.DestroyFailedException;
+import javax.swing.JOptionPane;
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
 import java.sql.*;
@@ -15,6 +16,7 @@ import de.mkammerer.argon2.Argon2Factory.Argon2Types;
 
 import org.bouncycastle.crypto.engines.AESEngine;
 import org.bouncycastle.crypto.modes.GCMBlockCipher;
+import org.bouncycastle.crypto.modes.GCMModeCipher;
 import org.bouncycastle.crypto.params.AEADParameters;
 import org.bouncycastle.crypto.params.KeyParameter;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
@@ -101,6 +103,15 @@ public class Backend {
         wipeCharArray(masterPassword);
     }
 
+    protected void changeMasterPass(Connection conn, char[] masterPassword,String username)
+        {
+                // make new salt
+                //param
+                //devkey
+                // wrap key
+                // put back key and new salt in database
+        }
+
     protected static void cleanupWipeDown() throws Exception {
         System.out.println("Cleaning Backend");
         wipeByteArray(User_AES_Key);
@@ -173,7 +184,7 @@ public class Backend {
             // KeyParameter holds raw key bytes — wipeable unlike SecretKey
             KeyParameter keyParam = new KeyParameter(Vault_Use_Key);
             // GCM mode — authenticated encryption, 128-bit tag
-            GCMBlockCipher cipher = new GCMBlockCipher(new AESEngine());
+            GCMModeCipher cipher = GCMBlockCipher.newInstance(AESEngine.newInstance());
             AEADParameters params = new AEADParameters(keyParam, GCM_TAG_LENGTH, iv);
             cipher.init(true, params); // true = encrypt
             // Allocate output buffer and process
@@ -193,7 +204,7 @@ public class Backend {
             KeyParameter keyParam = new KeyParameter(Vault_Use_Key);
 
             // GCM mode — authenticated decryption, 128-bit tag
-            GCMBlockCipher cipher = new GCMBlockCipher(new AESEngine());
+            GCMModeCipher cipher = GCMBlockCipher.newInstance(AESEngine.newInstance());
             AEADParameters params = new AEADParameters(keyParam, GCM_TAG_LENGTH, iv);
             cipher.init(false, params); // false = decrypt
 
