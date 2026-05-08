@@ -439,7 +439,7 @@ public class GUI {
             if (passwordGood){
                 try {
                 backend.changeMasterPass(conn, masterPassword,username);
-                JOptionPane.showMessageDialog(null, "Changed " + username + " account password","Success", JOptionPane.INFORMATION_MESSAGE, dialogIcon);
+                JOptionPane.showMessageDialog(null, "Changed " + username + " account password.   You must logout and back in again.","Success", JOptionPane.INFORMATION_MESSAGE, dialogIcon);
                 } catch (Exception e) {
                 e.printStackTrace();
                 JOptionPane.showMessageDialog(null, "Failed to change " + username + " account password","Error", JOptionPane.ERROR_MESSAGE, dialogIcon);

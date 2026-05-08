@@ -126,17 +126,16 @@ public class Backend {
                 // Wrap Vault Key with Argon2 generated key
                 byte [] wrappedKey = wrapVaultKey(new_User_AES_Key);
                 System.out.println("Key wrapped");
-                try (PreparedStatement update = conn.prepareStatement(
-                    "UPDATE users SET wrapped_vk = ? WHERE user_id = ?")) {
+                try (PreparedStatement update = conn.prepareStatement("UPDATE users SET wrapped_vk = ? WHERE user_id = ?")) {
                     update.setBytes(1, wrappedKey);
-                    update.setString(6, username);
+                    update.setString(2, username);
                     update.addBatch();
-                    wipeByteArray(wrappedKey);
-                    wipeByteArray(new_User_AES_Key);
+                    update.executeUpdate();
                 }
+                wipeByteArray(wrappedKey);
+                wipeByteArray(new_User_AES_Key);
             } 
-            try (PreparedStatement update = conn.prepareStatement(
-                    "UPDATE users SET, salt = ?, argon2_iter = ?, argon2_mem = ?, argon2_para = ? WHERE user_id = ?")) {
+            try (PreparedStatement update = conn.prepareStatement("UPDATE users SET salt = ?, argon2_iter = ?, argon2_mem = ?, argon2_para = ? WHERE user_id = ?")) {
                     update.setBytes(1, new_user_salt);
                     update.setInt(2, profile.iterations());
                     update.setInt(3, profile.memoryKb());
@@ -145,21 +144,19 @@ public class Backend {
                     update.executeUpdate();
                     System.out.println("Saved to DB");
                 }
-            
-            
             if (DATABASE_TYPE.equals("s")){
                 /// Extremely complex!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 /// ///// GIVE WARNING NOT SHUTDOWN, CANCEL, OR EXIT or data will be lost!!!!
-                Vault_Use_Key = new_User_AES_Key;
+
                 // Pulls everything decrypts then re-encrypts all data and Updates the Database
-               decryptEncryptWholeVault(conn);
-               
-                wipeByteArray(new_User_AES_Key);
-            }
-                
+                System.out.println("Starting Vault Password Change...");
+                decryptEncryptWholeVault(conn, Vault_Use_Key, new_User_AES_Key);
+                Vault_Use_Key = new_User_AES_Key;
+                System.out.println("Vault Password Change complete...");
+            }             
         }
 
-    protected void decryptEncryptWholeVault(Connection conn) throws Exception {
+    protected void decryptEncryptWholeVault(Connection conn, byte[] old_key, byte[] new_key) throws Exception {
         String sql = "SELECT id, tag, username, password, notes, iv FROM vault";
         try (PreparedStatement stmt = conn.prepareStatement(sql);
          ResultSet rs = stmt.executeQuery()) {
@@ -167,10 +164,10 @@ public class Backend {
         while (rs.next()) {
             
             byte[] new_iv = generateIV();
-            byte[] encrypted_tag = encryptData(decryptData(rs.getBytes("tag"), rs.getBytes("iv")), new_iv);
-            byte[] encrypted_username = encryptData(decryptData(rs.getBytes("username"), rs.getBytes("iv")), new_iv);
-            byte[] encrypted_pass = encryptData(decryptData(rs.getBytes("password"), rs.getBytes("iv")), new_iv);
-            byte[] encrypted_notes = encryptData(decryptData(rs.getBytes("notes"), rs.getBytes("iv")), new_iv);
+            byte[] encrypted_tag = encryptData(decryptData(rs.getBytes("tag"), rs.getBytes("iv"), old_key), new_iv, new_key);
+            byte[] encrypted_username = encryptData(decryptData(rs.getBytes("username"), rs.getBytes("iv"), old_key), new_iv, new_key);
+            byte[] encrypted_pass = encryptData(decryptData(rs.getBytes("password"), rs.getBytes("iv"), old_key), new_iv, new_key);
+            byte[] encrypted_notes = encryptData(decryptData(rs.getBytes("notes"), rs.getBytes("iv"), old_key), new_iv, new_key);
         
             String sql2 = "UPDATE vault SET tag = ?, username = ?, password = ?, notes = ?, iv = ? WHERE id = ?";
             try (PreparedStatement update = conn.prepareStatement(sql2)) {
@@ -279,11 +276,11 @@ public class Backend {
     // 🔒 will encrypt whatever data you feed into it, then return the ecypted value
     // IV is a random value used during encryption so that the same input doesn’t produce the same hash output
     // Generated for us whenever new data cycle/set is saved
-            private byte[] encryptData(char[] plaintext, byte[] iv) throws Exception {
+            private byte[] encryptData(char[] plaintext, byte[] iv, byte[] key) throws Exception {
             // Convert char[] to bytes so we can wipe after use
             byte[] data = new String(plaintext).getBytes(StandardCharsets.UTF_8);
             // KeyParameter holds raw key bytes — wipeable unlike SecretKey
-            KeyParameter keyParam = new KeyParameter(Vault_Use_Key);
+            KeyParameter keyParam = new KeyParameter(key);
             // GCM mode — authenticated encryption, 128-bit tag
             GCMModeCipher cipher = GCMBlockCipher.newInstance(AESEngine.newInstance());
             AEADParameters params = new AEADParameters(keyParam, GCM_TAG_LENGTH, iv);
@@ -299,7 +296,32 @@ public class Backend {
         }
 
     // ===== DECRYPT (ON DEMAND ONLY) =====
-            protected char[] decryptData(byte[] encrypted_data, byte[] iv) throws Exception {
+            protected char[] decryptData(byte[] encrypted_data, byte[] iv, byte[] key) throws Exception {
+
+            // KeyParameter holds raw key bytes — wipeable unlike SecretKey
+            KeyParameter keyParam = new KeyParameter(key);
+
+            // GCM mode — authenticated decryption, 128-bit tag
+            GCMModeCipher cipher = GCMBlockCipher.newInstance(AESEngine.newInstance());
+            AEADParameters params = new AEADParameters(keyParam, GCM_TAG_LENGTH, iv);
+            cipher.init(false, params); // false = decrypt
+
+            // Allocate output buffer and process
+            byte[] decrypted_charset = new byte[cipher.getOutputSize(encrypted_data.length)];
+            int len = cipher.processBytes(encrypted_data, 0, encrypted_data.length, decrypted_charset, 0);
+            cipher.doFinal(decrypted_charset, len);
+
+            // Convert to char[] so we can wipe the byte[] after
+            char[] plaintext = new String(decrypted_charset, StandardCharsets.UTF_8).toCharArray();
+
+            // Wipe sensitive byte arrays immediately after use
+            wipeByteArray(decrypted_charset);
+            Arrays.fill(keyParam.getKey(), (byte) 0);
+
+            return plaintext;
+        }
+
+        protected char[] decryptData(byte[] encrypted_data, byte[] iv) throws Exception {
 
             // KeyParameter holds raw key bytes — wipeable unlike SecretKey
             KeyParameter keyParam = new KeyParameter(Vault_Use_Key);
@@ -324,6 +346,7 @@ public class Backend {
             return plaintext;
         }
 
+
     // ===== DB LOAD ===== This just load the database to an Arraylist and decrypt Tag and Usernames
     protected List<Credential> loadAll(Connection conn) throws Exception {
         List<Credential> list = new ArrayList<>();
@@ -336,10 +359,10 @@ public class Backend {
             Credential c = new Credential();
             c.id = rs.getInt("id");
             c.iv = rs.getBytes("iv");
-            c.tag = new String(decryptData(rs.getBytes("tag"), c.iv));
-            c.username = new String(decryptData(rs.getBytes("username"), c.iv));
+            c.tag = new String(decryptData(rs.getBytes("tag"), c.iv, Vault_Use_Key));
+            c.username = new String(decryptData(rs.getBytes("username"), c.iv, Vault_Use_Key));
             c.encryptedPassword = rs.getBytes("password");
-            c.notes = new String(decryptData(rs.getBytes("notes"), c.iv));
+            c.notes = new String(decryptData(rs.getBytes("notes"), c.iv, Vault_Use_Key));
             list.add(c);
         }
 
@@ -350,10 +373,10 @@ public class Backend {
     protected void addEntry(Connection conn, char[] tag, char[] username, char[] password, char [] notes, String type) throws Exception {
         byte[] iv = generateIV();
         
-        byte[] encrypted_tag = encryptData(tag, iv);
-        byte[] encrypted_username = encryptData(username, iv);
-        byte[] encrypted_pass = encryptData(password, iv);
-        byte[] encrypted_notes = encryptData(notes, iv);
+        byte[] encrypted_tag = encryptData(tag, iv, Vault_Use_Key);
+        byte[] encrypted_username = encryptData(username, iv, Vault_Use_Key);
+        byte[] encrypted_pass = encryptData(password, iv, Vault_Use_Key);
+        byte[] encrypted_notes = encryptData(notes, iv, Vault_Use_Key);
         
         String sql = "INSERT INTO vault(tag, username, password, notes, iv) VALUES (?, ?, ?, ?, ?)";
         PreparedStatement stmt = conn.prepareStatement(sql);
@@ -426,7 +449,7 @@ public class Backend {
     // Will need to update both Tag and Username as well
     protected void updatePassword(Connection conn, int id, char[] newPassword) throws Exception {
         byte[] iv = generateIV();
-        byte[] encrypted_pass = encryptData(newPassword, iv);
+        byte[] encrypted_pass = encryptData(newPassword, iv, Vault_Use_Key);
 
         String sql = "UPDATE vault SET password = ?, iv = ? WHERE id = ?";
         PreparedStatement stmt = conn.prepareStatement(sql);
@@ -446,7 +469,7 @@ public class Backend {
     // Will need to update both Tag and Password as well
     protected void updateUsername(Connection conn, int id, char[] newUsername) throws Exception {
         byte[] iv = generateIV();
-        byte[] encrypted_pass = encryptData(newUsername, iv);
+        byte[] encrypted_pass = encryptData(newUsername, iv, Vault_Use_Key);
 
         String sql = "UPDATE vault SET username = ?, iv = ? WHERE id = ?";
         PreparedStatement stmt = conn.prepareStatement(sql);
@@ -563,6 +586,11 @@ public class Backend {
                     VK_STATUS = "gen";
                     insert.setString(1, "vk_status");
                     insert.setString(2, "gen");
+                    insert.addBatch();
+                } else if (type.equals("s")) { 
+                    VK_STATUS = "gen";
+                    insert.setString(1, "vk_status");
+                    insert.setString(2, "na");
                     insert.addBatch();
                 }
 
