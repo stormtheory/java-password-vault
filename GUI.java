@@ -26,8 +26,8 @@ public class GUI {
     public boolean passwordGood = false;
     private ImageIcon dialogIcon = null;
     protected Backend backend = new Backend();
-    protected DatabaseUtilities databaseutilities = new DatabaseUtilities();
-    private Connection conn;
+    protected static DatabaseUtilities databaseutilities = new DatabaseUtilities();
+    protected static Connection conn;
     private JTable table;
     private DefaultTableModel model;
     private List<Backend.Credential> credentials = new ArrayList<>();
@@ -136,17 +136,17 @@ public class GUI {
         if (!isNew) {        
             // Then connect - Got to connect to the database, best part auto-magically
             conn = DriverManager.getConnection("jdbc:sqlite:" + vaultPath);
-            DATABASE_TYPE = databaseutilities.Pull_DB_Status(conn, "type");
+            DATABASE_TYPE = DatabaseUtilities.Pull_DB_Text_Meta_item(conn, "type");
+            VaultLevel = DatabaseUtilities.Pull_DB_Text_Meta_item(conn, "vault_level");
         }
-
-        // ===== MASTER PASSWORD PROMPT =====
 
         // ======= HOOK for SHUTDOWN =======
         DatabaseUtilities.registerShutdownHook(isWindows);
 
         // ===== Create New Vault =============================================
+        // ===== MASTER PASSWORD PROMPT =====
         if (isNew) {
-            passwordGood = createNewMasterPass(true);
+            passwordGood = createNewMasterPass(conn, true);
         } else {
         // ===== AT STARTUP ===================================================
             JPasswordField pf = new JPasswordField();
@@ -432,7 +432,7 @@ public class GUI {
 
     private void changeMasterPass(String username)
         {
-            passwordGood = createNewMasterPass(false);
+            passwordGood = createNewMasterPass(conn, false);
             if (passwordGood){
                 try {
                 backend.changeMasterPass(conn, masterPassword,username);
@@ -479,7 +479,7 @@ public class GUI {
             }
         }
 
-    protected boolean createNewMasterPass(boolean createVault){
+    protected boolean createNewMasterPass(Connection conn, boolean createVault){
         int ok;
         while (true) {
             // ===== CREATE PASSWORD =====
@@ -511,6 +511,28 @@ public class GUI {
             "Paranoid - Vault/master-key grade"
         });
         profileSelector.setSelectedIndex(2);
+
+        if (!createVault) {
+            try {
+                // Capture the returned value — was previously discarded
+                String vault_level = DatabaseUtilities.Pull_DB_Text_Meta_item(conn, "vault_level");
+                // Map stored string to combobox index
+                int selectedIndex = switch (vault_level.trim()) {
+                    case "MINIMUM"  -> 0;
+                    case "BALANCED" -> 1;
+                    case "HIGH"     -> 2;
+                    case "PARANOID" -> 3;
+                    // Fallback to High if DB value is unexpected — fail secure, not fail open
+                    default -> {
+                        System.err.println("Unknown vault_level in DB: " + vault_level + " — defaulting to High");
+                        yield 2;
+                    }
+                };
+                profileSelector.setSelectedIndex(selectedIndex);
+            } catch (Exception e) {
+                System.err.println("Failed to pull DB metadata: " + e.getMessage());
+            }
+        }
 
         // Show/hide username field when vault type changes
         type_of_vault_label.setVisible(createVault);
@@ -568,7 +590,13 @@ public class GUI {
                     case 3  -> "PARANOID";
                     default -> "HIGH";
                 };
-
+            if (!createVault) {
+                try {
+                    DatabaseUtilities.Update_DB_Text_Meta_item(conn, "vault_level", VaultLevel);
+                } catch (Exception e) {
+                    System.err.println("Failed to update DB metadata: " + e.getMessage());
+                }
+            }
             passwordGood = testPasswordStrength( masterPassword , p2);
             Backend.wipeCharArray(p2);
             if (passwordGood){return true;}

@@ -4,7 +4,6 @@ import java.security.SecureRandom;
 import java.security.Security;
 
 import javax.security.auth.DestroyFailedException;
-import javax.swing.JOptionPane;
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
 import java.sql.*;
@@ -58,7 +57,7 @@ public class Backend {
         int[] params = loadArgon2Params(conn, username);
         user_salt = loadUserSalt(conn, username);
         User_AES_Key = deriveKey(masterPassword, params, username, user_salt, conn);
-        VK_STATUS = databaseutilities.Pull_DB_Status(conn, "vk_status");
+        VK_STATUS = DatabaseUtilities.Pull_DB_Text_Meta_item(conn, "vk_status");
                                                                 
         if (type.equals("m")){
                                                                      
@@ -75,7 +74,7 @@ public class Backend {
                     update.setString(2, username);
                     update.executeUpdate();
                 }
-                databaseutilities.Update_DB_Status(conn, "vk_status", "true");
+                DatabaseUtilities.Update_DB_Text_Meta_item(conn, "vk_status", "true");
                 wipeByteArray(wrappedKey);
             } 
             else if (VK_STATUS.equals("true")){
@@ -103,13 +102,43 @@ public class Backend {
         wipeCharArray(masterPassword);
     }
 
-    protected void changeMasterPass(Connection conn, char[] masterPassword,String username)
+    protected void changeMasterPass(Connection conn, char[] masterPassword,String username) throws Exception
         {
-                // make new salt
-                //param
-                //devkey
-                // wrap key
-                // put back key and new salt in database
+            String DATABASE_TYPE = DatabaseUtilities.Pull_DB_Text_Meta_item(conn, "type");
+            VaultLevel = DatabaseUtilities.Pull_DB_Text_Meta_item(conn,"vault_level");
+            System.out.println(VaultLevel);
+            Argon2Profile.Profile profile = switch (VaultLevel) {
+                case "MINIMUM"  -> Argon2Profile.MINIMUM;
+                case "BALANCED"   -> Argon2Profile.BALANCED;
+                case "HIGH"     -> Argon2Profile.HIGH;
+                case "PARANOID"    -> Argon2Profile.PARANOID;
+                default -> throw new IllegalArgumentException("Unknown security profile: " + VaultLevel);
+            };
+            int[] params = {profile.iterations(), profile.memoryKb(), profile.parallelism()};
+            System.out.println(profile.iterations() + " | " + profile.memoryKb() + " | " +  profile.parallelism());
+            byte[] new_user_salt = new byte[SALT_SIZE];
+            new java.security.SecureRandom().nextBytes(user_salt);
+
+            byte[] new_User_AES_Key = deriveKey(masterPassword, params, username, new_user_salt, conn);
+            System.out.println("New Key Made");
+
+            if (DATABASE_TYPE.equals("m")){              
+                    // Wrap Vault Key with Argon2 generated key
+                    byte[] wrappedKey = wrapVaultKey(new_User_AES_Key);
+                    System.out.println("Key wrapped");
+                    try (PreparedStatement update = conn.prepareStatement(
+                        "UPDATE users SET wrapped_vk = ?, salt = ?, argon2_iter = ?, argon2_mem = ?, argon2_para = ? WHERE user_id = ?")) {
+                        update.setBytes(1, wrappedKey);
+                        update.setBytes(2, new_user_salt);
+                        update.setInt(3, profile.iterations());
+                        update.setInt(4, profile.memoryKb());
+                        update.setInt(5, profile.parallelism());
+                        update.setString(6, username);
+                        update.executeUpdate();
+                        System.out.println("Saved to DB");
+                    }
+                    wipeByteArray(wrappedKey);
+                }
         }
 
     protected static void cleanupWipeDown() throws Exception {
@@ -285,10 +314,7 @@ public class Backend {
     // ===== User ADD =====  ---- Has to happen at some point?
     protected void useraddEntry(Connection conn, String newUsername, char[] newPassword) throws Exception {
         
-        ////////////////// Pull Level
-
-         // --- Or select dynamically based on context (e.g. user tier, data sensitivity) --
-        VaultLevel = "HIGH";
+        VaultLevel = DatabaseUtilities.Pull_DB_Text_Meta_item(conn,"vault_level");
         Argon2Profile.Profile profile = switch (VaultLevel) {
             case "MINIMUM"  -> Argon2Profile.MINIMUM;
             case "BALANCED"   -> Argon2Profile.BALANCED;
@@ -469,7 +495,6 @@ public class Backend {
 
                 insert.executeBatch();
             }
-
 
             user_salt = new byte[SALT_SIZE];
             new java.security.SecureRandom().nextBytes(user_salt);

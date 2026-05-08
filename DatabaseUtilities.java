@@ -29,37 +29,52 @@ public class DatabaseUtilities
         }, "shutdown-hook-thread"));
     }
 
-    protected String Pull_DB_Status(Connection conn, String key) throws Exception {
+    protected static String Pull_DB_Text_Meta_item(Connection conn, String key) throws Exception {
         String sql = "SELECT Tvalue FROM meta WHERE key = ?";
-        PreparedStatement stmt = conn.prepareStatement(sql);
-        stmt.setString(1, key);
-        ResultSet rs = stmt.executeQuery();
-        return rs.getString(1);
-
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, key);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (!rs.next()) {
+                    throw new IllegalStateException("Meta key not found: " + key);
+                }
+                return rs.getString(1);
+            }
+        }
     }
 
-    protected void Update_DB_Status(Connection conn, String key, String value) throws Exception {
+    protected static void Update_DB_Text_Meta_item(Connection conn, String key, String value) throws Exception {
         String sql = "UPDATE meta SET Tvalue = ? WHERE key = ?";
-        PreparedStatement update = conn.prepareStatement(sql);
-        update.setString(1, value);
-        update.setString(2, key);
-        update.executeUpdate();
+        try (PreparedStatement update = conn.prepareStatement(sql)) {
+            update.setString(1, value);
+            update.setString(2, key);
+            int rows = update.executeUpdate();
+            if (rows == 0) {
+                throw new IllegalStateException("Update affected 0 rows — key not found: " + key);
+            }
+        }
     }
-
-        // ===== DELETE ENTRY ===== ----- Yup
+    // ===== DELETE ENTRY ===== ----- Yup
     protected void deleteEntry(Connection conn, int id) throws Exception {
         String sql = "DELETE FROM vault WHERE id = ?";
-        PreparedStatement stmt = conn.prepareStatement(sql);
-        stmt.setInt(1, id);
-        stmt.executeUpdate();
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, id);
+            int rows = stmt.executeUpdate();
+            if (rows == 0) {
+                throw new IllegalStateException("Delete affected 0 rows — vault id not found: " + id);
+            }
+        }
     }
-    
+
     // ===== User DELETE ===== ----- Yup
     protected void userdelEntry(Connection conn, String user_id) throws Exception {
         String sql = "DELETE FROM users WHERE user_id = ?";
-        PreparedStatement stmt = conn.prepareStatement(sql);
-        stmt.setString(1, user_id);
-        stmt.executeUpdate();
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, user_id);
+            int rows = stmt.executeUpdate();
+            if (rows == 0) {
+                throw new IllegalStateException("Delete affected 0 rows — user_id not found: " + user_id);
+            }
+        }
     }
 
     public static char[] generatePassword(int length, boolean useABC, boolean use123, boolean useSpec) {
