@@ -103,7 +103,6 @@ No external database or installer required.
 ## 🚀 Future Improvements
 
 **[ New Features ]**
-* Changing Master Password
 * Search/filter functionality
 * Passphrase Generator
 * Password Changing

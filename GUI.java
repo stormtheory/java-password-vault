@@ -297,16 +297,16 @@ public class GUI {
     // ===== REFRESH TABLE =====
     private void refreshTable() {
         model.setRowCount(0);
-
         for (Backend.Credential c : credentials) {
             model.addRow(new Object[]{
                     c.id,
-                    c.tag,
-                    c.username,
+                    new String(c.tag),
+                    new String(c.username),
                     "*****",
                     "Copy",
                     "Show"
             });
+        //c.wipe();
         }
     }
 

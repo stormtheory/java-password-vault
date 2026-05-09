@@ -37,16 +37,30 @@ public class Backend {
     //protected String username = "";
     private static byte[] user_salt;
     protected DatabaseUtilities databaseutilities = new DatabaseUtilities();
+    private static List<Credential> credentials = new ArrayList<>();
 
     // ===== DATA CLASS =====
     // If you build it they will come...
     protected static class Credential {
         protected int id;
-        protected String tag;
-        protected String username;
+        protected char[] tag;
+        protected char[] username;
         protected byte[] encryptedPassword;
         protected byte[] iv;
-        protected String notes;
+        protected char[] notes;
+        // Wipe a single credential — zero all sensitive fields and null references
+        protected void wipe() {
+            if (tag               != null) { Arrays.fill(tag,               '\0');   tag               = null; }
+            if (username          != null) { Arrays.fill(username,          '\0');   username          = null; }
+            if (notes             != null) { Arrays.fill(notes,             '\0');   notes             = null; }
+            // Wipe encrypted bytes and IV — even ciphertext shouldn't linger in memory
+            //if (encryptedPassword != null) { Arrays.fill(encryptedPassword, (byte) 0); encryptedPassword = null; }
+            //if (iv                != null) { Arrays.fill(iv,                (byte) 0); iv                = null; }
+        }
+        protected void close_wipe() {
+            if (encryptedPassword != null) { Arrays.fill(encryptedPassword, (byte) 0); encryptedPassword = null; }
+            if (iv                != null) { Arrays.fill(iv,                (byte) 0); iv                = null; }
+        }
     }
 
     // ===== FIRE THEM UP (INIT) ===== 
@@ -193,6 +207,20 @@ public class Backend {
         wipeByteArray(User_AES_Key);
         wipeByteArray(Vault_Use_Key);
         wipeByteArray(Vault_KEY);
+        System.out.println("Cleaned Key Arrays");
+        wipeCredentialList(credentials);
+    }
+    // Static — consistent with cleanupWipeDown() and other utility methods
+    private static void wipeCredentialList(List<Credential> list) {
+        if (list == null) return;
+        for (Credential c : list) {
+            if (c != null) {
+            c.wipe();
+            c.close_wipe();
+            }
+        }
+        System.out.println("Cleaned List Array");
+        list.clear();
     }
 
     // ===== LOAD ARGON2 PARAMETERS FROM DB =====
@@ -349,24 +377,25 @@ public class Backend {
 
     // ===== DB LOAD ===== This just load the database to an Arraylist and decrypt Tag and Usernames
     protected List<Credential> loadAll(Connection conn) throws Exception {
-        List<Credential> list = new ArrayList<>();
+        wipeCredentialList(credentials);
+        List<Credential> credentials = new ArrayList<>();
 
         String sql = "SELECT id, tag, username, password, notes, iv FROM vault";
-        PreparedStatement stmt = conn.prepareStatement(sql);
-        ResultSet rs = stmt.executeQuery();
+        try (PreparedStatement stmt = conn.prepareStatement(sql);
+        ResultSet rs = stmt.executeQuery();) {
 
         while (rs.next()) {
             Credential c = new Credential();
             c.id = rs.getInt("id");
             c.iv = rs.getBytes("iv");
-            c.tag = new String(decryptData(rs.getBytes("tag"), c.iv, Vault_Use_Key));
-            c.username = new String(decryptData(rs.getBytes("username"), c.iv, Vault_Use_Key));
+            c.tag = decryptData(rs.getBytes("tag"), c.iv, Vault_Use_Key);
+            c.username = decryptData(rs.getBytes("username"), c.iv, Vault_Use_Key);
             c.encryptedPassword = rs.getBytes("password");
-            c.notes = new String(decryptData(rs.getBytes("notes"), c.iv, Vault_Use_Key));
-            list.add(c);
+            c.notes = decryptData(rs.getBytes("notes"), c.iv, Vault_Use_Key);
+            credentials.add(c);
         }
-
-        return list;
+        }
+        return credentials;
     }
 
     // ===== ADD ENTRY =====  ---- Has to happen at some point?
