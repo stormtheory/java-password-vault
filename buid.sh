@@ -49,6 +49,8 @@ Options:
   -j             Create Jar file
   -d             debug
 
+  -a             pass arguments
+
   -h             Show this help message
 
 Example:
@@ -121,14 +123,18 @@ BUILD() {
 
 RUN(){
       echo "java --enable-native-access=ALL-UNNAMED -Dorg.sqlite.tmpdir=. -cp \".:lib/$SQLITE_LIB:lib/$ARGON2_LIB:lib/$ARGON2_NOLIB:lib/$BOUNCY_HOUSE_LIB:lib/$JNA_LIB:bin\" GUI"
-      java --enable-native-access=ALL-UNNAMED -Dorg.sqlite.tmpdir=. -cp ".:lib/$SQLITE_LIB:lib/$ARGON2_LIB:lib/$ARGON2_NOLIB:lib/$BOUNCY_HOUSE_LIB:lib/$JNA_LIB:bin" GUI
+      java --enable-native-access=ALL-UNNAMED -Dorg.sqlite.tmpdir=. -cp ".:lib/$SQLITE_LIB:lib/$ARGON2_LIB:lib/$ARGON2_NOLIB:lib/$BOUNCY_HOUSE_LIB:lib/$JNA_LIB:bin" GUI $ARGUMENTS
 }
 
 DEBUG=false
 HELP=true
+ARGUMENTS=
 # 🔍 Parse options
-while getopts ":ijdcbrh" opt; do
+while getopts ":a:ijdcbrh" opt; do
   case ${opt} in
+    a)
+        ARGUMENTS=$OPTARG
+        ;;
     c)
         TAR_UP=true
         DOWNLOADS=true

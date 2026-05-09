@@ -1,12 +1,35 @@
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Image;
 import java.awt.event.ItemEvent;
 import java.io.File;
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import javax.swing.*;
-import javax.swing.table.*;
+
+import javax.swing.DefaultCellEditor;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
+import javax.swing.JFileChooser;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPasswordField;
+import javax.swing.JScrollPane;
+import javax.swing.JSpinner;
+import javax.swing.JTable;
+import javax.swing.JTextField;
+import javax.swing.SpinnerNumberModel;
+import javax.swing.SwingUtilities;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableCellRenderer;
 
 public class GUI {
     
@@ -16,11 +39,13 @@ public class GUI {
     private static final int CLIPBOARD_CLEAR_SEC = 60_000;
 
 // ===== DEFAULT FIELDS ======
-    public boolean DEBUG = false; //true or false, set to false before production
+    public static boolean DEBUG = false; //true or false, set to false before production
     
-    private static String DATABASE_TYPE = "";
+    private static String DATABASE_TYPE;
     private String username = "single-user";
-    protected String VaultLevel = "";
+    protected String VaultLevel;
+    protected static Boolean arg_vaultPath = false;
+    protected static String vaultPath;
     public boolean isWindows = System.getProperty("os.name").toLowerCase().startsWith("windows");
     private static char[] masterPassword = new char[0];
     public boolean passwordGood = false;
@@ -34,22 +59,52 @@ public class GUI {
     
 // ======= MAIN ====================
     public static void main(String[] args) throws Exception {
+        
         if (System.getProperty("nativeAccessEnabled") == null) {
         String java = ProcessHandle.current().info().command().orElse("java");
         String classpath = System.getProperty("java.class.path");
 
         // Relaunch the JVM with the required flags
-        ProcessBuilder pb = new ProcessBuilder(
+        List<String> cmd = new ArrayList<>(Arrays.asList(
             java,
             "--enable-native-access=ALL-UNNAMED",
             "-Djava.io.tmpdir=" + System.getProperty("user.dir"),
-            "-DnativeAccessEnabled=true", // prevents infinite relaunch loop
+            "-DnativeAccessEnabled=true",
             "-cp", classpath,
             "GUI"
-        );
-        pb.inheritIO(); // pass through all output/input
+        ));
+
+        // Forward all original args to the relaunched process
+        cmd.addAll(Arrays.asList(args));
+
+        ProcessBuilder pb = new ProcessBuilder(cmd);
+        pb.inheritIO();
         Process p = pb.start();
-        System.exit(p.waitFor()); // exit current process, return child exit code
+        System.exit(p.waitFor());
+    }
+
+    for (int i = 0; i < args.length; i++) {
+        switch (args[i]) {
+            case "--port":
+                int port = Integer.parseInt(args[++i]); // grab next arg as value
+                break;
+            case "--vault_file":
+                arg_vaultPath = true;
+                vaultPath = args[++i];
+                System.out.println(vaultPath);
+                break;
+            case "--vault-file":
+                arg_vaultPath = true;
+                vaultPath = args[++i];
+                System.out.println(vaultPath);
+                break;
+            case "-d":
+                DEBUG = true;
+                break;
+            case "-h":
+                helpMenu();
+                break;
+        }
     }
 
         SwingUtilities.invokeLater(() -> {
@@ -61,9 +116,26 @@ public class GUI {
         });
     }
 
+    public static void helpMenu(){
+        System.out.println("""
+        ---- Help Menu ---
+
+            --vault_file [file_dir_path]
+
+            -d              Debug
+            -h              Help Menu
+
+        """);
+        System.exit(0);
+    }
+
     protected void start() throws Exception {
         //java.io.File dbFile = new java.io.File("vault.db");
-        String vaultPath = System.getProperty("user.home") + "/Documents/vault.db";
+        if (!arg_vaultPath) 
+            {
+                vaultPath = System.getProperty("user.home") + "/Documents/vault.db";
+            }
+        //System.out.println(vaultPath);
         java.io.File dbFile = new java.io.File(vaultPath);
         boolean isNew = !dbFile.exists();
 
@@ -96,7 +168,7 @@ public class GUI {
         if (isNew) {
             Object[] options = {"Create New Vault", "Locate Existing Vault", "Cancel"};
             int choice = JOptionPane.showOptionDialog(null,
-                "No vault found in Documents.\nCreate a new vault or locate an existing one?",
+                "No vault found at "+ vaultPath +"\nCreate a new vault or locate an existing one?",
                 "Vault Not Found",
                 JOptionPane.YES_NO_CANCEL_OPTION,
                 JOptionPane.QUESTION_MESSAGE,
