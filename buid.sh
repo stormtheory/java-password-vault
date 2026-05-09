@@ -26,6 +26,7 @@ BOUNCY_HOUSE_LIB='bcprov-jdk18on-1.84.jar'
 SQLITE_LIB='sqlite-jdbc-3.53.0.0.jar'
 
 JAR_FILENAME=JavaPasswordVault.jar
+DIR_NAME=java-password-vault
 
 # No running as root!
 ID=$(id -u)
@@ -67,18 +68,16 @@ TAR_UP() {
         current_dir_path=$(echo "${pwd_current%/*}")
         current_dir=$(echo "${pwd_current##*/}")
 
-        DIR_NAME=java-password-vault
-
         if [ "$current_dir" == "$DIR_NAME" ];then
-        tar --exclude="$DIR_NAME/.git" -czvf ../java-password-vault.tgz ../$DIR_NAME
+        tar --exclude="$DIR_NAME/.git" -czvf ../$DIR_NAME.tgz ../$DIR_NAME
         else
         echo "  Not $current_dir looking for $DIR_NAME"
         mv ../$current_dir ../$DIR_NAME
-        tar --exclude="$DIR_NAME/.git" -czvf ../java-password-vault.tgz ../$DIR_NAME
+        tar --exclude="$DIR_NAME/.git" -czvf ../$DIR_NAME.tgz ../$DIR_NAME
         fi
 
         if [ "$DOWNLOADS" == true ];then
-        cp -v ../java-password-vault.tgz ~/Downloads
+        cp -v ../$DIR_NAME.tgz ~/Downloads
         fi
 }
 
@@ -122,7 +121,7 @@ BUILD() {
 }
 
 RUN(){
-      echo "java --enable-native-access=ALL-UNNAMED -Dorg.sqlite.tmpdir=. -cp \".:lib/$SQLITE_LIB:lib/$ARGON2_LIB:lib/$ARGON2_NOLIB:lib/$BOUNCY_HOUSE_LIB:lib/$JNA_LIB:bin\" GUI"
+      echo "java --enable-native-access=ALL-UNNAMED -Dorg.sqlite.tmpdir=. -cp \".:lib/$SQLITE_LIB:lib/$ARGON2_LIB:lib/$ARGON2_NOLIB:lib/$BOUNCY_HOUSE_LIB:lib/$JNA_LIB:bin\" GUI $ARGUMENTS"
       java --enable-native-access=ALL-UNNAMED -Dorg.sqlite.tmpdir=. -cp ".:lib/$SQLITE_LIB:lib/$ARGON2_LIB:lib/$ARGON2_NOLIB:lib/$BOUNCY_HOUSE_LIB:lib/$JNA_LIB:bin" GUI $ARGUMENTS
 }
 

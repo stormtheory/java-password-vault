@@ -20,7 +20,18 @@ set ARGON2_NOLIB=argon2-jvm-nolibs-2.12.jar
 set JNA_LIB=jna-5.18.1.jar
 set BOUNCY_HOUSE_LIB=bcprov-jdk18on-1.84.jar
 set SQLITE_LIB=sqlite-jdbc-3.53.0.0.jar
+
+:: Jar output file
 set JAR_FILENAME=JavaPasswordVault.jar
+
+set "PROJECT_NAME=java-password-vault"
+
+:: ZIP goes into the parent folder, named after the project
+set "ZIP_FILE=java-password-vault.zip"
+set "ZIP_PATH=%PARENT_DIR%%ZIP_FILE%"
+
+:: Stage into a temp copy that excludes .git (mirrors tar --exclude=.git)
+set "STAGE=%TEMP%\java-password-vault-stage"
 
 :: ── Minimum required Java version ────────────────────────────────────
 :: Argon2-jvm requires at least Java 11 (JNA bridge).
@@ -571,23 +582,18 @@ set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
 :: drive path like "C:\" would produce "C:" which is invalid.
 for %%I in ("%SCRIPT_DIR%") do set "PARENT_DIR=%%~dpI"
 
-:: ZIP goes into the parent folder, named after the project
-set "ZIP_PATH=%PARENT_DIR%java-password-vault.zip"
-
 :: Remove stale archive if present
 if exist "%ZIP_PATH%" del /q "%ZIP_PATH%"
 
-:: Stage into a temp copy that excludes .git (mirrors tar --exclude=.git)
-set "STAGE=%TEMP%\java-password-vault-stage"
 if exist "%STAGE%" rmdir /s /q "%STAGE%"
-mkdir "%STAGE%\java-password-vault"
+mkdir "%STAGE%\%PROJECT_NAME%"
 
 :: robocopy: /e = recurse subdirs incl. empty, /xd = exclude .git dir
-robocopy "%SCRIPT_DIR%" "%STAGE%\java-password-vault" /e /xd ".git" >nul
+robocopy "%SCRIPT_DIR%" "%STAGE%\%PROJECT_NAME%" /e /xd ".git" >nul
 
 :: Compress the staged copy using PowerShell (no third-party tools needed)
 powershell -NoProfile -Command ^
-    "Compress-Archive -Path '%STAGE%\java-password-vault' -DestinationPath '%ZIP_PATH%' -Force"
+    "Compress-Archive -Path '%STAGE%\%PROJECT_NAME%' -DestinationPath '%ZIP_PATH%' -Force"
 
 :: Clean up staging directory
 rmdir /s /q "%STAGE%"
@@ -597,7 +603,7 @@ echo Archive created: %ZIP_PATH%
 :: Optionally copy to Downloads (mirrors the -d flag behaviour)
 if "%DOWNLOADS%"=="true" (
     copy /y "%ZIP_PATH%" "%USERPROFILE%\Downloads\" >nul
-    echo Copied to: %USERPROFILE%\Downloads\java-password-vault.zip
+    echo Copied to: %USERPROFILE%\Downloads\%PROJECT_NAME%.zip
 )
 goto :eof
 
