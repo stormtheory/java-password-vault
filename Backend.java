@@ -15,6 +15,7 @@ import de.mkammerer.argon2.Argon2Factory.Argon2Types;
 
 import org.bouncycastle.crypto.engines.AESEngine;
 import org.bouncycastle.crypto.modes.GCMBlockCipher;
+import org.bouncycastle.crypto.modes.GCMModeCipher;
 import org.bouncycastle.crypto.params.AEADParameters;
 import org.bouncycastle.crypto.params.KeyParameter;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
@@ -36,15 +37,30 @@ public class Backend {
     //protected String username = "";
     private static byte[] user_salt;
     protected DatabaseUtilities databaseutilities = new DatabaseUtilities();
+    private static List<Credential> credentials = new ArrayList<>();
 
     // ===== DATA CLASS =====
     // If you build it they will come...
     protected static class Credential {
         protected int id;
-        protected String tag;
-        protected String username;
+        protected char[] tag;
+        protected char[] username;
         protected byte[] encryptedPassword;
         protected byte[] iv;
+        protected char[] notes;
+        // Wipe a single credential — zero all sensitive fields and null references
+        protected void wipe() {
+            if (tag               != null) { Arrays.fill(tag,               '\0');   tag               = null; }
+            if (username          != null) { Arrays.fill(username,          '\0');   username          = null; }
+            if (notes             != null) { Arrays.fill(notes,             '\0');   notes             = null; }
+            // Wipe encrypted bytes and IV — even ciphertext shouldn't linger in memory
+            //if (encryptedPassword != null) { Arrays.fill(encryptedPassword, (byte) 0); encryptedPassword = null; }
+            //if (iv                != null) { Arrays.fill(iv,                (byte) 0); iv                = null; }
+        }
+        protected void close_wipe() {
+            if (encryptedPassword != null) { Arrays.fill(encryptedPassword, (byte) 0); encryptedPassword = null; }
+            if (iv                != null) { Arrays.fill(iv,                (byte) 0); iv                = null; }
+        }
     }
 
     // ===== FIRE THEM UP (INIT) ===== 
@@ -56,7 +72,7 @@ public class Backend {
         int[] params = loadArgon2Params(conn, username);
         user_salt = loadUserSalt(conn, username);
         User_AES_Key = deriveKey(masterPassword, params, username, user_salt, conn);
-        VK_STATUS = databaseutilities.Pull_DB_Status(conn, "vk_status");
+        VK_STATUS = DatabaseUtilities.Pull_DB_Text_Meta_item(conn, "vk_status");
                                                                 
         if (type.equals("m")){
                                                                      
@@ -73,7 +89,7 @@ public class Backend {
                     update.setString(2, username);
                     update.executeUpdate();
                 }
-                databaseutilities.Update_DB_Status(conn, "vk_status", "true");
+                DatabaseUtilities.Update_DB_Text_Meta_item(conn, "vk_status", "true");
                 wipeByteArray(wrappedKey);
             } 
             else if (VK_STATUS.equals("true")){
@@ -101,33 +117,154 @@ public class Backend {
         wipeCharArray(masterPassword);
     }
 
+    protected void changeMasterPass(Connection conn, char[] masterPassword,String username) throws Exception
+        {
+            String DATABASE_TYPE = DatabaseUtilities.Pull_DB_Text_Meta_item(conn, "type");
+            VaultLevel = DatabaseUtilities.Pull_DB_Text_Meta_item(conn,"vault_level");
+            System.out.println(VaultLevel);
+            Argon2Profile.Profile profile = switch (VaultLevel) {
+                case "MINIMUM"  -> Argon2Profile.MINIMUM;
+                case "BALANCED"   -> Argon2Profile.BALANCED;
+                case "HIGH"     -> Argon2Profile.HIGH;
+                case "PARANOID"    -> Argon2Profile.PARANOID;
+                default -> throw new IllegalArgumentException("Unknown security profile: " + VaultLevel);
+            };
+            int[] params = {profile.iterations(), profile.memoryKb(), profile.parallelism()};
+            System.out.println(profile.iterations() + " | " + profile.memoryKb() + " | " +  profile.parallelism());
+            byte[] new_user_salt = new byte[SALT_SIZE];
+            new java.security.SecureRandom().nextBytes(user_salt);
+            byte[] new_User_AES_Key = deriveKey(masterPassword, params, username, new_user_salt, conn);
+            System.out.println("New Key Made");
+
+            if (DATABASE_TYPE.equals("m")){              
+                // Wrap Vault Key with Argon2 generated key
+                byte [] wrappedKey = wrapVaultKey(new_User_AES_Key);
+                System.out.println("Key wrapped");
+                try (PreparedStatement update = conn.prepareStatement("UPDATE users SET wrapped_vk = ? WHERE user_id = ?")) {
+                    update.setBytes(1, wrappedKey);
+                    update.setString(2, username);
+                    update.addBatch();
+                    update.executeUpdate();
+                }
+                wipeByteArray(wrappedKey);
+                wipeByteArray(new_User_AES_Key);
+            } 
+            try (PreparedStatement update = conn.prepareStatement("UPDATE users SET salt = ?, argon2_iter = ?, argon2_mem = ?, argon2_para = ? WHERE user_id = ?")) {
+                    update.setBytes(1, new_user_salt);
+                    update.setInt(2, profile.iterations());
+                    update.setInt(3, profile.memoryKb());
+                    update.setInt(4, profile.parallelism());
+                    update.setString(5, username);
+                    update.executeUpdate();
+                    System.out.println("Saved to DB");
+                }
+            if (DATABASE_TYPE.equals("s")){
+                /// Extremely complex!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                /// ///// GIVE WARNING NOT SHUTDOWN, CANCEL, OR EXIT or data will be lost!!!!
+
+                // Pulls everything decrypts then re-encrypts all data and Updates the Database
+                System.out.println("Starting Vault Password Change...");
+                decryptEncryptWholeVault(conn, Vault_Use_Key, new_User_AES_Key);
+                Vault_Use_Key = new_User_AES_Key;
+                System.out.println("Vault Password Change complete...");
+            }             
+        }
+
+    protected void decryptEncryptWholeVault(Connection conn, byte[] old_key, byte[] new_key) throws Exception {
+        String sql = "SELECT id, tag, username, password, notes, iv FROM vault";
+        try (PreparedStatement stmt = conn.prepareStatement(sql);
+         ResultSet rs = stmt.executeQuery()) {
+
+        while (rs.next()) {
+            
+            byte[] new_iv = generateIV();
+            byte[] encrypted_tag = encryptData(decryptData(rs.getBytes("tag"), rs.getBytes("iv"), old_key), new_iv, new_key);
+            byte[] encrypted_username = encryptData(decryptData(rs.getBytes("username"), rs.getBytes("iv"), old_key), new_iv, new_key);
+            byte[] encrypted_pass = encryptData(decryptData(rs.getBytes("password"), rs.getBytes("iv"), old_key), new_iv, new_key);
+            byte[] encrypted_notes = encryptData(decryptData(rs.getBytes("notes"), rs.getBytes("iv"), old_key), new_iv, new_key);
+        
+            String sql2 = "UPDATE vault SET tag = ?, username = ?, password = ?, notes = ?, iv = ? WHERE id = ?";
+            try (PreparedStatement update = conn.prepareStatement(sql2)) {
+                update.setBytes(1, encrypted_tag);
+                update.setBytes(2, encrypted_username);
+                update.setBytes(3, encrypted_pass);
+                update.setBytes(4, encrypted_notes);
+                update.setBytes(5, new_iv);
+                update.setInt(6, rs.getInt("id"));
+                int rows = update.executeUpdate();
+                if (rows == 0) {
+                    throw new IllegalStateException("Re-encrypt failed — id not found: " + rs.getInt("id"));
+                }
+                System.out.println("Re-encrypted entry: " + rs.getInt("id"));
+            }
+            wipeByteArray(encrypted_tag);wipeByteArray(encrypted_username);wipeByteArray(encrypted_pass);wipeByteArray(encrypted_notes);wipeByteArray(new_iv);
+        }
+        }
+    }
+
     protected static void cleanupWipeDown() throws Exception {
         System.out.println("Cleaning Backend");
         wipeByteArray(User_AES_Key);
         wipeByteArray(Vault_Use_Key);
         wipeByteArray(Vault_KEY);
+        System.out.println("Cleaned Key Arrays");
+        wipeCredentialList(credentials);
+    }
+    // Static — consistent with cleanupWipeDown() and other utility methods
+    private static void wipeCredentialList(List<Credential> list) {
+        if (list == null) return;
+        for (Credential c : list) {
+            if (c != null) {
+            c.wipe();
+            c.close_wipe();
+            }
+        }
+        System.out.println("Cleaned List Array");
+        list.clear();
     }
 
     // ===== LOAD ARGON2 PARAMETERS FROM DB =====
         // Always derive the key using the parameters the vault was CREATED with
         // Never use hardcoded constants at derive-time - who knows when the parameters may have been upgraded
         private int[] loadArgon2Params(Connection conn, String username) throws Exception {
-            PreparedStatement ps = conn.prepareStatement(
-                "SELECT argon2_iter, argon2_mem, argon2_para FROM users WHERE user_id = ?"
-            );
-            ps.setString(1, username);
-            ResultSet rs = ps.executeQuery();
-            return new int[]{rs.getInt("argon2_iter"), rs.getInt("argon2_mem"), rs.getInt("argon2_para")};
+            String sql = "SELECT argon2_iter, argon2_mem, argon2_para FROM users WHERE user_id = ?";
+            // try-with-resources — guarantees ps and rs closed even if exception thrown
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setString(1, username);
+                try (ResultSet rs = ps.executeQuery()) {
+                    // Guard — missing user would throw a cryptic SQLException without this
+                    if (!rs.next()) {
+                        throw new IllegalStateException("User not found loading Argon2 params: " + username);
+                    }
+                    return new int[]{
+                        rs.getInt("argon2_iter"),
+                        rs.getInt("argon2_mem"),
+                        rs.getInt("argon2_para")
+                    };
+                }
+            }
         }
 
         private byte[] loadUserSalt(Connection conn, String username) throws Exception {
-            PreparedStatement ps = conn.prepareStatement(
-                "SELECT salt FROM users WHERE user_id = ?"
-            );
-            ps.setString(1, username);
-            ResultSet rs = ps.executeQuery();
-                return rs.getBytes("salt");
+            String sql = "SELECT salt FROM users WHERE user_id = ?";
+            // try-with-resources — guarantees ps and rs closed even if exception thrown
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setString(1, username);
+                try (ResultSet rs = ps.executeQuery()) {
+                    // Guard — returning null salt would cause a silent crypto failure downstream
+                    if (!rs.next()) {
+                        throw new IllegalStateException("User not found loading salt: " + username);
+                    }
+                    byte[] salt = rs.getBytes("salt");
+                    // Validate salt is present and correct length — a null/short salt
+                    // would silently weaken Argon2 without this check
+                    if (salt == null || salt.length < 16) {
+                        throw new IllegalStateException("Invalid or missing salt for user: " + username);
+                    }
+                    return salt;
+                }
             }
+        }
 
     // ===== KEY DERIVATION ===== Argon2id replaced PBKDF2 entirely ===== One of the most important parts!!!! 
         // Key derivation turns a human readable password into a strong cryptographic key
@@ -167,13 +304,13 @@ public class Backend {
     // 🔒 will encrypt whatever data you feed into it, then return the ecypted value
     // IV is a random value used during encryption so that the same input doesn’t produce the same hash output
     // Generated for us whenever new data cycle/set is saved
-            private byte[] encryptData(char[] plaintext, byte[] iv) throws Exception {
+            private byte[] encryptData(char[] plaintext, byte[] iv, byte[] key) throws Exception {
             // Convert char[] to bytes so we can wipe after use
             byte[] data = new String(plaintext).getBytes(StandardCharsets.UTF_8);
             // KeyParameter holds raw key bytes — wipeable unlike SecretKey
-            KeyParameter keyParam = new KeyParameter(Vault_Use_Key);
+            KeyParameter keyParam = new KeyParameter(key);
             // GCM mode — authenticated encryption, 128-bit tag
-            GCMBlockCipher cipher = new GCMBlockCipher(new AESEngine());
+            GCMModeCipher cipher = GCMBlockCipher.newInstance(AESEngine.newInstance());
             AEADParameters params = new AEADParameters(keyParam, GCM_TAG_LENGTH, iv);
             cipher.init(true, params); // true = encrypt
             // Allocate output buffer and process
@@ -187,13 +324,13 @@ public class Backend {
         }
 
     // ===== DECRYPT (ON DEMAND ONLY) =====
-            protected char[] decryptData(byte[] encrypted_data, byte[] iv) throws Exception {
+            protected char[] decryptData(byte[] encrypted_data, byte[] iv, byte[] key) throws Exception {
 
             // KeyParameter holds raw key bytes — wipeable unlike SecretKey
-            KeyParameter keyParam = new KeyParameter(Vault_Use_Key);
+            KeyParameter keyParam = new KeyParameter(key);
 
             // GCM mode — authenticated decryption, 128-bit tag
-            GCMBlockCipher cipher = new GCMBlockCipher(new AESEngine());
+            GCMModeCipher cipher = GCMBlockCipher.newInstance(AESEngine.newInstance());
             AEADParameters params = new AEADParameters(keyParam, GCM_TAG_LENGTH, iv);
             cipher.init(false, params); // false = decrypt
 
@@ -212,35 +349,63 @@ public class Backend {
             return plaintext;
         }
 
+        protected char[] decryptData(byte[] encrypted_data, byte[] iv) throws Exception {
+
+            // KeyParameter holds raw key bytes — wipeable unlike SecretKey
+            KeyParameter keyParam = new KeyParameter(Vault_Use_Key);
+
+            // GCM mode — authenticated decryption, 128-bit tag
+            GCMModeCipher cipher = GCMBlockCipher.newInstance(AESEngine.newInstance());
+            AEADParameters params = new AEADParameters(keyParam, GCM_TAG_LENGTH, iv);
+            cipher.init(false, params); // false = decrypt
+
+            // Allocate output buffer and process
+            byte[] decrypted_charset = new byte[cipher.getOutputSize(encrypted_data.length)];
+            int len = cipher.processBytes(encrypted_data, 0, encrypted_data.length, decrypted_charset, 0);
+            cipher.doFinal(decrypted_charset, len);
+
+            // Convert to char[] so we can wipe the byte[] after
+            char[] plaintext = new String(decrypted_charset, StandardCharsets.UTF_8).toCharArray();
+
+            // Wipe sensitive byte arrays immediately after use
+            wipeByteArray(decrypted_charset);
+            Arrays.fill(keyParam.getKey(), (byte) 0);
+
+            return plaintext;
+        }
+
+
     // ===== DB LOAD ===== This just load the database to an Arraylist and decrypt Tag and Usernames
     protected List<Credential> loadAll(Connection conn) throws Exception {
-        List<Credential> list = new ArrayList<>();
+        wipeCredentialList(credentials);
+        List<Credential> credentials = new ArrayList<>();
 
-        String sql = "SELECT id, tag, username, password, iv FROM vault";
-        PreparedStatement stmt = conn.prepareStatement(sql);
-        ResultSet rs = stmt.executeQuery();
+        String sql = "SELECT id, tag, username, password, notes, iv FROM vault";
+        try (PreparedStatement stmt = conn.prepareStatement(sql);
+        ResultSet rs = stmt.executeQuery();) {
 
         while (rs.next()) {
             Credential c = new Credential();
             c.id = rs.getInt("id");
             c.iv = rs.getBytes("iv");
-            c.tag = new String(decryptData(rs.getBytes("tag"), c.iv));
-            c.username = new String(decryptData(rs.getBytes("username"), c.iv));
+            c.tag = decryptData(rs.getBytes("tag"), c.iv, Vault_Use_Key);
+            c.username = decryptData(rs.getBytes("username"), c.iv, Vault_Use_Key);
             c.encryptedPassword = rs.getBytes("password");
-            list.add(c);
+            c.notes = decryptData(rs.getBytes("notes"), c.iv, Vault_Use_Key);
+            credentials.add(c);
         }
-
-        return list;
+        }
+        return credentials;
     }
 
     // ===== ADD ENTRY =====  ---- Has to happen at some point?
     protected void addEntry(Connection conn, char[] tag, char[] username, char[] password, char [] notes, String type) throws Exception {
         byte[] iv = generateIV();
         
-        byte[] encrypted_tag = encryptData(tag, iv);
-        byte[] encrypted_username = encryptData(username, iv);
-        byte[] encrypted_pass = encryptData(password, iv);
-        byte[] encrypted_notes = encryptData(notes, iv);
+        byte[] encrypted_tag = encryptData(tag, iv, Vault_Use_Key);
+        byte[] encrypted_username = encryptData(username, iv, Vault_Use_Key);
+        byte[] encrypted_pass = encryptData(password, iv, Vault_Use_Key);
+        byte[] encrypted_notes = encryptData(notes, iv, Vault_Use_Key);
         
         String sql = "INSERT INTO vault(tag, username, password, notes, iv) VALUES (?, ?, ?, ?, ?)";
         PreparedStatement stmt = conn.prepareStatement(sql);
@@ -274,10 +439,7 @@ public class Backend {
     // ===== User ADD =====  ---- Has to happen at some point?
     protected void useraddEntry(Connection conn, String newUsername, char[] newPassword) throws Exception {
         
-        ////////////////// Pull Level
-
-         // --- Or select dynamically based on context (e.g. user tier, data sensitivity) --
-        VaultLevel = "HIGH";
+        VaultLevel = DatabaseUtilities.Pull_DB_Text_Meta_item(conn,"vault_level");
         Argon2Profile.Profile profile = switch (VaultLevel) {
             case "MINIMUM"  -> Argon2Profile.MINIMUM;
             case "BALANCED"   -> Argon2Profile.BALANCED;
@@ -316,7 +478,7 @@ public class Backend {
     // Will need to update both Tag and Username as well
     protected void updatePassword(Connection conn, int id, char[] newPassword) throws Exception {
         byte[] iv = generateIV();
-        byte[] encrypted_pass = encryptData(newPassword, iv);
+        byte[] encrypted_pass = encryptData(newPassword, iv, Vault_Use_Key);
 
         String sql = "UPDATE vault SET password = ?, iv = ? WHERE id = ?";
         PreparedStatement stmt = conn.prepareStatement(sql);
@@ -336,7 +498,7 @@ public class Backend {
     // Will need to update both Tag and Password as well
     protected void updateUsername(Connection conn, int id, char[] newUsername) throws Exception {
         byte[] iv = generateIV();
-        byte[] encrypted_pass = encryptData(newUsername, iv);
+        byte[] encrypted_pass = encryptData(newUsername, iv, Vault_Use_Key);
 
         String sql = "UPDATE vault SET username = ?, iv = ? WHERE id = ?";
         PreparedStatement stmt = conn.prepareStatement(sql);
@@ -454,11 +616,15 @@ public class Backend {
                     insert.setString(1, "vk_status");
                     insert.setString(2, "gen");
                     insert.addBatch();
+                } else if (type.equals("s")) { 
+                    VK_STATUS = "gen";
+                    insert.setString(1, "vk_status");
+                    insert.setString(2, "na");
+                    insert.addBatch();
                 }
 
                 insert.executeBatch();
             }
-
 
             user_salt = new byte[SALT_SIZE];
             new java.security.SecureRandom().nextBytes(user_salt);
