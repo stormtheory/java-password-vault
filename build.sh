@@ -26,6 +26,7 @@ BOUNCY_HOUSE_LIB='bcprov-jdk18on-1.84.jar'
 SQLITE_LIB='sqlite-jdbc-3.53.0.0.jar'
 
 JAR_FILENAME=JavaPasswordVault.jar
+DIR_NAME=java-password-vault
 
 # No running as root!
 ID=$(id -u)
@@ -42,7 +43,9 @@ show_help() {
 Usage: $(basename "$0") [OPTIONS]
 
 Options:
-  -c             Copy the tar to the downloads directory
+  -t             tar compress to the downloads directory
+  -z             .zip compress to the downloads directory
+  -c             Clean
   -i             Runs the build function
   -b             Runs the build function
   -r             Starts the GUI program
@@ -54,7 +57,7 @@ Options:
   -h             Show this help message
 
 Example:
-  $0 -br
+  $0 -br -a '-d'
 EOF
 }
 
@@ -67,18 +70,30 @@ TAR_UP() {
         current_dir_path=$(echo "${pwd_current%/*}")
         current_dir=$(echo "${pwd_current##*/}")
 
-        DIR_NAME=java-password-vault
-
-        if [ "$current_dir" == "$DIR_NAME" ];then
-        tar --exclude="$DIR_NAME/.git" -czvf ../java-password-vault.tgz ../$DIR_NAME
-        else
+        if [ "$current_dir" != "$DIR_NAME" ];then
         echo "  Not $current_dir looking for $DIR_NAME"
         mv ../$current_dir ../$DIR_NAME
-        tar --exclude="$DIR_NAME/.git" -czvf ../java-password-vault.tgz ../$DIR_NAME
         fi
+        tar --exclude="$DIR_NAME/.git" -czvf ../$DIR_NAME.tgz ../$DIR_NAME
 
         if [ "$DOWNLOADS" == true ];then
-        cp -v ../java-password-vault.tgz ~/Downloads
+        mv -v ../$DIR_NAME.tgz ~/Downloads
+        fi
+}
+
+ZIP_UP() {
+        pwd_current=$(pwd)
+        current_dir_path=$(echo "${pwd_current%/*}")
+        current_dir=$(echo "${pwd_current##*/}")
+
+        if [ "$current_dir" != "$DIR_NAME" ];then
+        echo "  Not $current_dir looking for $DIR_NAME"
+        mv ../$current_dir ../$DIR_NAME
+        fi
+        zip -r ../$DIR_NAME.zip ../$DIR_NAME --exclude "**/.git/*"
+
+        if [ "$DOWNLOADS" == true ];then
+        mv -v ../$DIR_NAME.zip ~/Downloads
         fi
 }
 
@@ -122,26 +137,41 @@ BUILD() {
 }
 
 RUN(){
-      echo "java --enable-native-access=ALL-UNNAMED -Dorg.sqlite.tmpdir=. -cp \".:lib/$SQLITE_LIB:lib/$ARGON2_LIB:lib/$ARGON2_NOLIB:lib/$BOUNCY_HOUSE_LIB:lib/$JNA_LIB:bin\" GUI"
-      java --enable-native-access=ALL-UNNAMED -Dorg.sqlite.tmpdir=. -cp ".:lib/$SQLITE_LIB:lib/$ARGON2_LIB:lib/$ARGON2_NOLIB:lib/$BOUNCY_HOUSE_LIB:lib/$JNA_LIB:bin" GUI $ARGUMENTS
+      echo "java --enable-native-access=ALL-UNNAMED -cp \".:lib/$SQLITE_LIB:lib/$ARGON2_LIB:lib/$ARGON2_NOLIB:lib/$BOUNCY_HOUSE_LIB:lib/$JNA_LIB:bin\" GUI $ARGUMENTS"
+      java --enable-native-access=ALL-UNNAMED -cp ".:lib/$SQLITE_LIB:lib/$ARGON2_LIB:lib/$ARGON2_NOLIB:lib/$BOUNCY_HOUSE_LIB:lib/$JNA_LIB:bin" GUI $ARGUMENTS
 }
 
 DEBUG=false
 HELP=true
+CLEAN=false
 ARGUMENTS=
 # 🔍 Parse options
-while getopts ":a:ijdcbrh" opt; do
+while getopts ":a:ijdcbrhzt" opt; do
   case ${opt} in
     a)
         ARGUMENTS=$OPTARG
+        HELP=false
         ;;
     c)
+        Clean=true
+        HELP=false
+        ;;
+    t)
+        Clean=true
         TAR_UP=true
         DOWNLOADS=true
         HELP=false
         ;;
+    z)
+        Clean=true
+        ZIP_UP=true
+        DOWNLOADS=true
+        HELP=false
+        ;;
     j)  
+        Clean=true
         JAR
+        HELP=false
         exit
         ;;
     i)
@@ -174,6 +204,13 @@ while getopts ":a:ijdcbrh" opt; do
   esac
 done
 
+if [ "$Clean" == true ];then
+  echo "Cleaning..."
+  rm -rf bin/*
+  rm -f JavaPasswordVault.jar
+  rm -rf fatjar
+  rm -f vault.db
+fi
 
 if [ "$BUILD" == true ];then
     BUILD
@@ -181,6 +218,10 @@ fi
 
 if [ "$TAR_UP" == true ];then
     TAR_UP
+fi
+
+if [ "$ZIP_UP" == true ];then
+    ZIP_UP
 fi
 
 if [ "$RUN" == true ];then

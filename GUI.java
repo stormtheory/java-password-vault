@@ -10,7 +10,6 @@ import java.sql.DriverManager;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-
 import javax.swing.DefaultCellEditor;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
@@ -60,23 +59,20 @@ public class GUI {
 // ======= MAIN ====================
     public static void main(String[] args) throws Exception {
         
-        if (System.getProperty("nativeAccessEnabled") == null) {
+    DatabaseUtilities.configureSQLiteTmpDir();
+
+    if (System.getProperty("nativeAccessEnabled") == null) {
         String java = ProcessHandle.current().info().command().orElse("java");
         String classpath = System.getProperty("java.class.path");
-
-        // Relaunch the JVM with the required flags
         List<String> cmd = new ArrayList<>(Arrays.asList(
             java,
             "--enable-native-access=ALL-UNNAMED",
-            "-Djava.io.tmpdir=" + System.getProperty("user.dir"),
+            "-Dorg.sqlite.tmpdir=" + System.getProperty("org.sqlite.tmpdir"),
             "-DnativeAccessEnabled=true",
             "-cp", classpath,
             "GUI"
         ));
-
-        // Forward all original args to the relaunched process
         cmd.addAll(Arrays.asList(args));
-
         ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.inheritIO();
         Process p = pb.start();
@@ -213,7 +209,7 @@ public class GUI {
         }
 
         // ======= HOOK for SHUTDOWN =======
-        DatabaseUtilities.registerShutdownHook(isWindows);
+        DatabaseUtilities.registerShutdownHook(isWindows, DEBUG);
 
         // ===== Create New Vault =============================================
         // ===== MASTER PASSWORD PROMPT =====

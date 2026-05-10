@@ -207,11 +207,11 @@ public class Backend {
         wipeByteArray(User_AES_Key);
         wipeByteArray(Vault_Use_Key);
         wipeByteArray(Vault_KEY);
-        System.out.println("Cleaned Key Arrays");
-        wipeCredentialList(credentials);
+        System.out.println("Cleaned Key Arrays  [DONE]");
+        wipeCredentialList(credentials, true);
     }
     // Static — consistent with cleanupWipeDown() and other utility methods
-    private static void wipeCredentialList(List<Credential> list) {
+    private static void wipeCredentialList(List<Credential> list, boolean EXIT) {
         if (list == null) return;
         for (Credential c : list) {
             if (c != null) {
@@ -219,7 +219,7 @@ public class Backend {
             c.close_wipe();
             }
         }
-        System.out.println("Cleaned List Array");
+        if (EXIT) System.out.println("Cleaned List Array  [DONE]");
         list.clear();
     }
 
@@ -377,7 +377,7 @@ public class Backend {
 
     // ===== DB LOAD ===== This just load the database to an Arraylist and decrypt Tag and Usernames
     protected List<Credential> loadAll(Connection conn) throws Exception {
-        wipeCredentialList(credentials);
+        wipeCredentialList(credentials, false);
         List<Credential> credentials = new ArrayList<>();
 
         String sql = "SELECT id, tag, username, password, notes, iv FROM vault";
