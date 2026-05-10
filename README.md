@@ -82,7 +82,7 @@ Tags, Usernames, and Passwords are stored as encrypted binary blobs.
 
 ## ⚙️ Requirements
 
-* Java JDK 17+ (tested on newer versions)
+* Java JDK 17+
 * SQLite JDBC driver:
 
   * `sqlite-jdbc-3.53.0.0.jar`
@@ -155,11 +155,11 @@ No external database or installer required.
             
 
         # Windows Install or edit code:
-                run.bat -br # Build and Run
+                .\run.bat -br # Build and Run
 
                 # or
 
-                run.bat           
+                .\run.bat           
               
 
 ## RUN:
@@ -171,7 +171,7 @@ No external database or installer required.
 
         # Windows:
             Within the folder run command:
-            run.bat
+            .\run.bat
 
 
 ## Create .jar file, run commands:
@@ -183,7 +183,7 @@ No external database or installer required.
 
   Extract directory from the zip file. Run the following commands within the directory.
 
-  On windows run the `run.bat -j` and for Linux run `./build.sh -j`
+  On your system, for windows run the `.\run.bat -j` and for Linux run `./build.sh -j`
 
 
 ---
