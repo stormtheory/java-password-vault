@@ -1,3 +1,5 @@
+<h3 align="center">Project NO longer being developed. See https://github.com/odin-data-vault for current development.</h3>
+
 <div align="center"><img width="250" height="250" alt="Image" src="https://github.com/user-attachments/assets/76ae44a2-00a7-453a-8b75-595f184bd7a2" /></div>
 <h1 align="center">Java Password Vault</h1>
 <h3 align="center">(Java + SQLite + AES-GCM + Post Quantum Resistant)</h3>
@@ -14,7 +16,7 @@ The vault encrypts all stored data using **AES-256 in GCM mode**, with keys deri
 
 ## 🧠 Purpose and Project Overview
 
-This was something I (StormTheory) solely coded for a **University of Missouri–Saint Louis (UMSL)** Object Orientated Coding (Java 2) end of course project. I wanted to do a project that I'm passionate about, privacy and security and in doing so built it to demonstrate cryptography best practices including authenticated encryption, secure key derivation, memory wiping, and safe storage. It was intended as a **learning-focused implementation** of a password manager, demonstrating real-world cryptography practices such as authenticated encryption, secure key handling, and safe storage patterns, while flexing my muscles on some Java development.
+This was something I (StormTheory) solely coded for a **University of Missouri–Saint Louis (UMSL)** Object Orientated Coding (Java 2) end of course project. I wanted to do a project that I'm passionate about, privacy and security and in doing so built it to demonstrate cryptography best practices including authenticated encryption, secure key derivation, memory wiping, and safe storage. It was intended as a **learning-focused implementation** of a password manager, demonstrating real-world cryptography practices such as authenticated encryption, secure key handling, and safe storage patterns, while flexing my muscles on some Java development. This project, has ended with the semester and now as of May 2026 just cleaning it up and setting it into a working state to sit as an example to future students of a simple thing that can be done. See https://github.com/odin-data-vault for current development.
 
 ---
 <div align="center">
