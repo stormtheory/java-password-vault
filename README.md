@@ -2,7 +2,7 @@
 <h1 align="center">Java Password Vault</h1>
 <h3 align="center">(Java + SQLite + AES-GCM + Post Quantum Resistant)</h3>
 
-<h4 align="center">Keeping secrets safe. Since April 2026</h4>
+<h4 align="center">Keeping secrets safe. April 2026</h4>
 
 ## Overview
 
@@ -12,9 +12,9 @@ The vault encrypts all stored data using **AES-256 in GCM mode**, with keys deri
 
 ---
 
-## 🧠 Purpose
+## 🧠 Purpose and Project Overview
 
-This project is intended as a **learning-focused implementation** of a password manager, demonstrating real-world cryptographic practices such as authenticated encryption, secure key handling, and safe storage patterns.
+This was something I (StormTheory) solely coded for a **University of Missouri–Saint Louis (UMSL)** Object Orientated Coding (Java 2) end of course project. I wanted to do a project that I'm passionate about, privacy and security and in doing so built it to demonstrate cryptography best practices including authenticated encryption, secure key derivation, memory wiping, and safe storage. It was intended as a **learning-focused implementation** of a password manager, demonstrating real-world cryptography practices such as authenticated encryption, secure key handling, and safe storage patterns, while flexing my muscles on some Java development.
 
 ---
 <div align="center">
@@ -245,7 +245,7 @@ No external database or installer required.
   * MINIMUM  → rate-limited online service, low-value data
   * BALANCED → typical application credentials
   * HIGH     → the RFC 9106 authors' explicit recommendation for sensitive credentials
-  * PARANOID → the key is the secret (master key, recovery code, vault root) — you derive it rarely, so you can afford to make it brutal
+  * PARANOID → the key is the secret (master key, recovery code, vault root) - you derive it rarely, so you can afford to make it brutal
 
 ## Decryption
 
